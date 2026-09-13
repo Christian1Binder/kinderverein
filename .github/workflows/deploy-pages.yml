@@ -30,11 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Restore Vite source entry
-        run: cp index.source.html index.html
-
-      - name: Build production site
-        run: npm run build
+      - name: Build production site for GitHub Pages
+        run: npm run build:pages
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
