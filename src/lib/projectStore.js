@@ -1,15 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
 import { seedState } from '../data/seed.js'
 
 const STORAGE_KEY = 'kinderverein-project-state-v1'
-const PROJECT_ID = 'kinderverein-main'
+const backendMode = import.meta.env.VITE_BACKEND_MODE || 'local'
+const apiUrl = import.meta.env.VITE_API_URL || './api/index.php'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
-export const cloudEnabled = Boolean(supabaseUrl && supabaseKey)
-export const supabase = cloudEnabled ? createClient(supabaseUrl, supabaseKey) : null
+export const cloudEnabled = backendMode === 'php'
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
+let authListener = null
+let lastRemoteStamp = null
 
 export function loadLocalState() {
   try {
@@ -30,83 +29,115 @@ export function resetLocalState() {
   return clone(seedState)
 }
 
+async function request(action, options = {}) {
+  const response = await fetch(`${apiUrl}?action=${encodeURIComponent(action)}`, {
+    credentials: 'same-origin',
+    headers: {
+      Accept: 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+    cache: 'no-store',
+    ...options,
+  })
+
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error('Das STRATO-Backend antwortet nicht korrekt.')
+  }
+
+  if (!response.ok || payload?.ok === false) {
+    const error = new Error(payload?.message || `Serverfehler (${response.status})`)
+    error.status = response.status
+    throw error
+  }
+  return payload
+}
+
 export async function getSession() {
-  if (!supabase) return null
-  const { data } = await supabase.auth.getSession()
-  return data.session
+  if (!cloudEnabled) return null
+  try {
+    const payload = await request('session')
+    return payload.session || null
+  } catch (error) {
+    if (error.status === 503) return null
+    throw error
+  }
 }
 
 export function onAuthChange(callback) {
-  if (!supabase) return () => {}
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session))
-  return () => data.subscription.unsubscribe()
+  authListener = callback
+  return () => {
+    if (authListener === callback) authListener = null
+  }
 }
 
-export async function signInWithEmail(email) {
-  if (!supabase) throw new Error('Cloud-Modus ist nicht konfiguriert.')
-  const redirectTo = window.location.origin + window.location.pathname
-  const { error } = await supabase.auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    options: {
-      emailRedirectTo: redirectTo,
-      // Produktivbetrieb: Nur bereits angelegte/eingeladene Teamkonten duerfen sich anmelden.
-      shouldCreateUser: false,
-    },
+export async function signInWithEmail(email, password = '') {
+  if (!cloudEnabled) throw new Error('Das gemeinsame STRATO-Backend ist nicht aktiv.')
+  if (!password) throw new Error('Bitte Passwort eingeben.')
+  const payload = await request('login', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   })
-  if (error) throw error
+  const session = payload.session || null
+  authListener?.(session)
+  return session
 }
 
 export async function signOut() {
-  if (!supabase) return
-  const { error } = await supabase.auth.signOut()
-  if (error) throw error
+  if (!cloudEnabled) return
+  await request('logout', { method: 'POST', body: JSON.stringify({}) })
+  authListener?.(null)
 }
 
 export async function loadCloudState() {
-  if (!supabase) return null
-  const { data, error } = await supabase
-    .from('project_state')
-    .select('data, updated_at')
-    .eq('id', PROJECT_ID)
-    .maybeSingle()
-
-  if (error) throw error
-  if (!data) {
-    const initial = clone(seedState)
-    const created = await saveCloudState(initial)
+  if (!cloudEnabled) return null
+  const payload = await request('state')
+  lastRemoteStamp = payload.updatedAt || null
+  if (!payload.data) {
+    const created = await saveCloudState(clone(seedState))
     return created
   }
-  return data.data
+  return payload.data
 }
 
 export async function saveCloudState(state) {
-  if (!supabase) return state
-  const payload = {
-    id: PROJECT_ID,
-    data: state,
-    updated_at: new Date().toISOString(),
-  }
-  const { data, error } = await supabase
-    .from('project_state')
-    .upsert(payload, { onConflict: 'id' })
-    .select('data')
-    .single()
-  if (error) throw error
-  return data.data
+  if (!cloudEnabled) return state
+  const payload = await request('state', {
+    method: 'PUT',
+    body: JSON.stringify({ data: state }),
+  })
+  lastRemoteStamp = payload.updatedAt || lastRemoteStamp
+  return payload.data || state
 }
 
 export function subscribeCloudState(callback) {
-  if (!supabase) return () => {}
-  const channel = supabase
-    .channel('kinderverein-project-state')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'project_state', filter: `id=eq.${PROJECT_ID}` },
-      (payload) => {
-        const next = payload.new?.data
-        if (next) callback(next)
-      },
-    )
-    .subscribe()
-  return () => supabase.removeChannel(channel)
+  if (!cloudEnabled) return () => {}
+  let stopped = false
+  let busy = false
+
+  const poll = async () => {
+    if (stopped || busy) return
+    busy = true
+    try {
+      const payload = await request('state')
+      if (payload.updatedAt && payload.updatedAt !== lastRemoteStamp) {
+        lastRemoteStamp = payload.updatedAt
+        if (payload.data) callback(payload.data)
+      }
+    } catch (error) {
+      if (error.status === 401) authListener?.(null)
+      else console.error('Synchronisierung fehlgeschlagen', error)
+    } finally {
+      busy = false
+    }
+  }
+
+  const timer = window.setInterval(poll, 4000)
+  return () => {
+    stopped = true
+    window.clearInterval(timer)
+  }
 }
