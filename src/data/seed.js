@@ -1,0 +1,88 @@
+const phase = (id, title, start, end, status, milestone, owner, description) => ({
+  id, title, start, end, status, milestone, owner, description,
+})
+
+export const seedState = {
+  meta: {
+    projectName: 'Kinderverein · Gründung e.V.',
+    subtitle: 'Projektzentrale für Aufbau, Gemeinnützigkeit und Trägerfähigkeit',
+    location: 'Langenzenn · Bayern',
+    lastUpdated: '2026-09-13T10:00:00+02:00',
+    targetReady: '2027-04-01',
+  },
+  phases: [
+    phase('p1', 'Grundkonzept & Vereinsname', '2026-09-13', '2026-09-27', 'active', 'M1 · Identität festgelegt', 'Projektleitung', 'Name, Sitz, Zwecke, Zielgruppen und Tätigkeitsrahmen finalisieren.'),
+    phase('p2', 'Vereinsstruktur', '2026-09-21', '2026-10-04', 'planned', 'M2 · Organisationsmodell beschlossen', 'Projektleitung + Gründungskreis', 'Gründungsmitglieder, Vorstand, Vertretung, Amtsdauer, Beiträge und Geschäftsführung festlegen.'),
+    phase('p3', 'Satzungsentwurf', '2026-09-28', '2026-10-11', 'planned', 'M3 · Satzungsentwurf prüffähig', 'Projektleitung', 'Gemeinnützige Trägersatzung mit Personal- und Geschäftsführungsoption erstellen.'),
+    phase('p4', 'Satzung vorprüfen', '2026-10-12', '2026-10-30', 'planned', 'M4 · Satzung gründungsreif', 'Projektleitung', 'Steuerliche Vorprüfung und registerrechtliche Plausibilisierung.'),
+    phase('p5', 'Gründungsversammlung vorbereiten', '2026-10-19', '2026-10-31', 'planned', 'M5 · Gründungspaket vollständig', 'Projektleitung', 'Einladung, Tagesordnung, Satzung, Teilnehmerliste, Wahlvorschläge und Protokoll vorbereiten.'),
+    phase('p6', 'Gründungsversammlung', '2026-11-01', '2026-11-08', 'planned', 'M6 · Verein gegründet', 'Gründungsversammlung', 'Satzung beschließen, Vorstand wählen, Protokoll und Unterschriften abschließen.'),
+    phase('p7', 'Notar & Vereinsregister', '2026-11-09', '2026-12-20', 'planned', 'M7 · Eintragung als e.V.', 'Vorstand', 'Anmeldung über Notar beim Vereinsregister und Eintragung abwarten.'),
+    phase('p8', 'Steuerliche Erfassung', '2026-11-09', '2027-01-15', 'planned', 'M8 · Steuerlich handlungsfähig', 'Vorstand + Finanzen', 'Steuerliche Erfassung und § 60a AO-Feststellung organisieren.'),
+    phase('p9', 'Bank & Finanzorganisation', '2026-12-01', '2027-01-31', 'planned', 'M9 · Finanzorganisation betriebsbereit', 'Finanzverantwortung', 'Vereinskonto, Freigaben, Buchhaltung, Kostenstellen und Belegablage aufbauen.'),
+    phase('p10', 'Versicherungen & Verwaltung', '2027-01-01', '2027-01-31', 'planned', 'M10 · Grundabsicherung steht', 'Vorstand + Projektleitung', 'Versicherungen, Datenschutz, Dokumentenablage und interne Zuständigkeiten organisieren.'),
+    phase('p11', 'Arbeitgeberfähigkeit', '2027-01-15', '2027-02-28', 'planned', 'M11 · Personal kann beschäftigt werden', 'Projektleitung + Finanzen', 'Betriebsnummer, Lohn, Sozialversicherung, BG, Arbeitsverträge und Personalprozesse.'),
+    phase('p12', 'Kinderschutz & Pädagogik', '2027-01-15', '2027-03-15', 'planned', 'M12 · Fachlich trägerfähig', 'Pädagogische Projektleitung', 'Kinderschutz, Führungszeugnisse, Verhaltenskodex, Beschwerden, Datenschutz und Trägerkonzept.'),
+    phase('p13', 'Finanz- & Personalplan', '2027-02-01', '2027-03-15', 'planned', 'M13 · Tragfähigkeit nachgewiesen', 'Projektleitung + Finanzen', 'Personalkosten, Verwaltung, Vertretung, Versicherungen, Fortbildung und Liquidität modellieren.'),
+    phase('p14', 'Betriebsbereitschaft', '2027-03-16', '2027-04-15', 'planned', 'M14 · Träger-ready', 'Projektleitung + Vorstand', 'Alle rechtlichen, fachlichen und wirtschaftlichen Unterlagen in einem Betriebsbereitschaftspaket bündeln.'),
+    phase('p15', 'Späterer OGTS-Trägerwechsel', '2027-04-16', '2027-08-31', 'locked', 'M15 · Übernahmefähigkeit entschieden', 'Vorstand + Projektleitung', 'Separates Folgeprojekt: Verträge, Finanzierung, Zuständigkeiten, § 613a BGB und Übergang.'),
+  ],
+  milestones: [
+    { id: 'm1', code: 'M1', title: 'Identität festgelegt', date: '2026-09-27', status: 'active', owner: 'Projektleitung', phaseId: 'p1', notes: 'Endgültiger Name, Sitz, Zwecke und Tätigkeitsrahmen beschlossen.' },
+    { id: 'm2', code: 'M2', title: 'Organisationsmodell beschlossen', date: '2026-10-04', status: 'planned', owner: 'Gründungskreis', phaseId: 'p2', notes: 'Vorstand, Vertretung, Rollen und Mitgliedschaft festgelegt.' },
+    { id: 'm3', code: 'M3', title: 'Satzungsentwurf prüffähig', date: '2026-10-11', status: 'planned', owner: 'Projektleitung', phaseId: 'p3', notes: 'Vollständige Satzung für Vorprüfung bereit.' },
+    { id: 'm4', code: 'M4', title: 'Satzung gründungsreif', date: '2026-10-30', status: 'planned', owner: 'Projektleitung', phaseId: 'p4', notes: 'Steuerliche und registerrechtliche Rückmeldungen eingearbeitet.' },
+    { id: 'm5', code: 'M5', title: 'Gründungspaket vollständig', date: '2026-10-31', status: 'planned', owner: 'Projektleitung', phaseId: 'p5', notes: 'Alle Unterlagen für die Gründungsversammlung liegen vor.' },
+    { id: 'm6', code: 'M6', title: 'Verein gegründet', date: '2026-11-08', status: 'planned', owner: 'Gründungsversammlung', phaseId: 'p6', notes: 'Satzung beschlossen und Vorstand gewählt.' },
+    { id: 'm7', code: 'M7', title: 'Eintragung als e.V.', date: '2026-12-20', status: 'planned', owner: 'Vorstand', phaseId: 'p7', notes: 'Registereintragung abgeschlossen.' },
+    { id: 'm8', code: 'M8', title: 'Steuerlich handlungsfähig', date: '2027-01-15', status: 'planned', owner: 'Vorstand + Finanzen', phaseId: 'p8', notes: 'Steuerliche Erfassung und § 60a AO organisiert.' },
+    { id: 'm11', code: 'M11', title: 'Arbeitgeberfähig', date: '2027-02-28', status: 'planned', owner: 'Projektleitung + Finanzen', phaseId: 'p11', notes: 'Personal kann administrativ sauber beschäftigt werden.' },
+    { id: 'm14', code: 'M14', title: 'Träger-ready', date: '2027-04-15', status: 'planned', owner: 'Vorstand + Projektleitung', phaseId: 'p14', notes: 'Rechtliche, fachliche und wirtschaftliche Betriebsbereitschaft erreicht.' },
+  ],
+  tasks: [
+    { id: 't1', title: 'Neue Namensideen final bewerten', phaseId: 'p1', owner: 'Projektleitung', due: '2026-09-18', status: 'doing', priority: 'high', tags: ['Name', 'Entscheidung'] },
+    { id: 't2', title: 'Namenskollisionen prüfen', phaseId: 'p1', owner: 'Projektleitung', due: '2026-09-22', status: 'todo', priority: 'high', tags: ['Name', 'Prüfung'] },
+    { id: 't3', title: 'Sieben Gründungsmitglieder verbindlich festhalten', phaseId: 'p2', owner: 'Gründungskreis', due: '2026-09-28', status: 'todo', priority: 'high', tags: ['Mitglieder'] },
+    { id: 't4', title: 'Vorstandsmodell und Vertretungsregelung festlegen', phaseId: 'p2', owner: 'Gründungskreis', due: '2026-10-02', status: 'todo', priority: 'high', tags: ['Vorstand'] },
+    { id: 't5', title: 'Satzungsentwurf erstellen', phaseId: 'p3', owner: 'Projektleitung', due: '2026-10-09', status: 'todo', priority: 'high', tags: ['Satzung'] },
+    { id: 't6', title: 'Einladung und Tagesordnung vorbereiten', phaseId: 'p5', owner: 'Projektleitung', due: '2026-10-24', status: 'todo', priority: 'medium', tags: ['Gründung'] },
+    { id: 't7', title: 'Notartermin vorbereiten', phaseId: 'p7', owner: 'Vorstand', due: '2026-11-12', status: 'todo', priority: 'medium', tags: ['Register'] },
+  ],
+  team: [
+    { id: 'u1', name: 'Projektleitung', email: '', role: 'Projektleitung', area: 'Gesamtkoordination', initials: 'PL', active: true },
+    { id: 'u2', name: 'Vorstand · offen', email: '', role: 'Entscheidung', area: 'Vereinsführung', initials: 'VO', active: false },
+    { id: 'u3', name: 'Finanzverantwortung · offen', email: '', role: 'Verantwortlich', area: 'Finanzen & Buchhaltung', initials: 'FI', active: false },
+    { id: 'u4', name: 'Pädagogische Leitung', email: '', role: 'Verantwortlich', area: 'Pädagogik & Kinderschutz', initials: 'PÄ', active: true },
+  ],
+  polls: [
+    {
+      id: 'v1', title: 'Welcher Vereinsname soll in die Endrunde?', description: 'Gemeinsame Vorauswahl für den späteren Kollisionscheck.', status: 'open', closes: '2026-09-20', multiple: false,
+      options: [
+        { id: 'o1', label: 'Neuer Vorschlag A', votes: [] },
+        { id: 'o2', label: 'Neuer Vorschlag B', votes: [] },
+        { id: 'o3', label: 'Neuer Vorschlag C', votes: [] },
+      ],
+    },
+  ],
+  documents: [
+    { id: 'd1', title: 'Endgültiger Vereinsname', category: 'Gründung', status: 'in_progress', owner: 'Projektleitung' },
+    { id: 'd2', title: 'Satzung', category: 'Gründung', status: 'open', owner: 'Projektleitung' },
+    { id: 'd3', title: 'Einladung & Tagesordnung', category: 'Gründung', status: 'open', owner: 'Projektleitung' },
+    { id: 'd4', title: 'Gründungsprotokoll', category: 'Gründung', status: 'open', owner: 'Protokollführung' },
+    { id: 'd5', title: 'Unterlagen Notar / Registergericht', category: 'Recht', status: 'open', owner: 'Vorstand' },
+    { id: 'd6', title: 'Steuerliche Gründungsunterlagen', category: 'Steuern', status: 'open', owner: 'Vorstand + Finanzen' },
+    { id: 'd7', title: 'Finanz- & Personalplan', category: 'Finanzen', status: 'open', owner: 'Projektleitung + Finanzen' },
+    { id: 'd8', title: 'Arbeitgeber-Checkliste', category: 'Personal', status: 'open', owner: 'Projektleitung' },
+    { id: 'd9', title: 'Versicherungsübersicht', category: 'Verwaltung', status: 'open', owner: 'Vorstand' },
+    { id: 'd10', title: 'Kinderschutzkonzept', category: 'Pädagogik', status: 'open', owner: 'Pädagogische Leitung' },
+    { id: 'd11', title: 'Pädagogisches Trägerkonzept', category: 'Pädagogik', status: 'open', owner: 'Pädagogische Leitung' },
+    { id: 'd12', title: 'OGTS-Trägerwechsel-Paket', category: 'Folgeprojekt', status: 'locked', owner: 'Vorstand + Projektleitung' },
+  ],
+  messages: [
+    { id: 'msg1', author: 'Projektzentrale', text: 'Der Projektmasterplan 1.0 ist angelegt. Aktuell läuft Phase 1: Grundkonzept & Vereinsname.', createdAt: '2026-09-13T10:00:00+02:00' },
+  ],
+  activities: [
+    { id: 'a1', text: 'Projektmasterplan 1.0 angelegt', createdAt: '2026-09-13T10:00:00+02:00', kind: 'system' },
+    { id: 'a2', text: 'Phase 1 „Grundkonzept & Vereinsname“ auf „in Arbeit“ gesetzt', createdAt: '2026-09-13T10:01:00+02:00', kind: 'status' },
+  ],
+}
