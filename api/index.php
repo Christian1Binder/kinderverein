@@ -40,7 +40,8 @@ try {
         $now = time();
         $blockedUntil = (int)($_SESSION['login_blocked_until'] ?? 0);
         if ($blockedUntil > $now) {
-            json_response(['ok' => false, 'message' => 'Zu viele Fehlversuche. Bitte später erneut versuchen.'], 429);
+            $remaining = max(1, $blockedUntil - $now);
+            json_response(['ok' => false, 'message' => "Zu viele Fehlversuche. Bitte in {$remaining} Sekunden erneut versuchen."], 429);
         }
 
         $input = json_input();
@@ -69,6 +70,7 @@ try {
         $_SESSION['user_id'] = (int)$user['id'];
         $_SESSION['login_failures'] = 0;
         unset($_SESSION['login_blocked_until']);
+        issue_auth_token((int)$user['id']);
         db()->prepare('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = ?')->execute([(int)$user['id']]);
 
         json_response([
@@ -85,6 +87,7 @@ try {
     }
 
     if ($action === 'logout' && $method === 'POST') {
+        clear_auth_token();
         start_secure_session();
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
