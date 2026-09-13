@@ -1,0 +1,67 @@
+name: Build and deploy STRATO site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'vite.config.js'
+      - 'index.source.html'
+      - '.env.example'
+      - 'supabase/**'
+      - '.github/workflows/build-strato.yml'
+  workflow_dispatch:
+
+env:
+  STRATO_HOST: ${{ secrets.STRATO_HOST }}
+  STRATO_USER: ${{ secrets.STRATO_USER }}
+  STRATO_PASSWORD: ${{ secrets.STRATO_PASSWORD }}
+  STRATO_REMOTE_PATH: ${{ secrets.STRATO_REMOTE_PATH }}
+
+jobs:
+  build-strato:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify shared-backend configuration
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_SUPABASE_URL" || (echo "VITE_SUPABASE_URL fehlt" && exit 1)
+          test -n "$VITE_SUPABASE_ANON_KEY" || (echo "VITE_SUPABASE_ANON_KEY fehlt" && exit 1)
+
+      - name: Build STRATO package
+        run: npm run build:strato
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Upload STRATO build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinderverein-strato
+          path: dist-strato/
+          if-no-files-found: error
+
+      - name: Install SFTP client
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy to STRATO via SFTP
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        run: |
+          TARGET="${STRATO_REMOTE_PATH:-.}"
+          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose dist-strato/ $TARGET; bye"
