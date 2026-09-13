@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-strato
 .env
 .env.local
 .DS_Store
+api/private/config.php
