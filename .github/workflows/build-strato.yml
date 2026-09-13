@@ -31,13 +31,13 @@ jobs:
         id: cloud-config
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          if [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+          if [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::STRATO-Build wartet auf VITE_SUPABASE_URL und VITE_SUPABASE_ANON_KEY."
+            echo "::notice::STRATO-Build wartet auf VITE_SUPABASE_URL und VITE_SUPABASE_PUBLISHABLE_KEY."
           fi
 
       - name: Set up Node.js
@@ -55,7 +55,7 @@ jobs:
         run: npm run build:strato
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Upload STRATO build artifact
         if: ${{ steps.cloud-config.outputs.enabled == 'true' }}
