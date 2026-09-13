@@ -5,7 +5,7 @@ const STORAGE_KEY = 'kinderverein-project-state-v1'
 const PROJECT_ID = 'kinderverein-main'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
 export const cloudEnabled = Boolean(supabaseUrl && supabaseKey)
 export const supabase = cloudEnabled ? createClient(supabaseUrl, supabaseKey) : null
 
