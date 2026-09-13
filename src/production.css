@@ -1,0 +1,4 @@
+/* Produktivbetrieb: gemeinsame Projektdaten sind nur nach Team-Login erreichbar. */
+.auth-card > .btn--ghost.btn--full {
+  display: none;
+}
