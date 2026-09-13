@@ -1,11 +1,14 @@
 {
   "name": "kinderverein-projektzentrale",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "prepare:source": "node scripts/restore-source.mjs",
+    "build": "npm run prepare:source && vite build",
+    "build:pages": "npm run prepare:source && vite build --base=/kinderverein/ --outDir dist",
+    "build:strato": "npm run prepare:source && vite build --base=./ --outDir dist-strato",
     "preview": "vite preview"
   },
   "dependencies": {
