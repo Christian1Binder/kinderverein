@@ -5,12 +5,11 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'api/**'
       - 'scripts/**'
       - 'package.json'
       - 'vite.config.js'
       - 'index.source.html'
-      - '.env.example'
-      - 'supabase/**'
       - '.github/workflows/build-strato.yml'
   workflow_dispatch:
 
@@ -27,38 +26,18 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check shared-backend configuration
-        id: cloud-config
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          if [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_PUBLISHABLE_KEY" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::STRATO-Build wartet auf VITE_SUPABASE_URL und VITE_SUPABASE_PUBLISHABLE_KEY."
-          fi
-
       - name: Set up Node.js
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install dependencies
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' }}
         run: npm install
 
       - name: Build STRATO package
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' }}
         run: npm run build:strato
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Upload STRATO build artifact
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: kinderverein-strato
@@ -66,11 +45,11 @@ jobs:
           if-no-files-found: error
 
       - name: Install SFTP client
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' && env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
         run: sudo apt-get update && sudo apt-get install -y lftp
 
       - name: Deploy to STRATO via SFTP
-        if: ${{ steps.cloud-config.outputs.enabled == 'true' && env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
         run: |
           TARGET="${STRATO_REMOTE_PATH:-.}"
-          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose dist-strato/ $TARGET; bye"
+          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob api/private/config.php dist-strato/ $TARGET; bye"
