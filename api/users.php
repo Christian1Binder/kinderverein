@@ -3,13 +3,56 @@ declare(strict_types=1);
 require __DIR__ . '/lib.php';
 start_secure_session();
 $user = session_user();
-if (!$user || ($user['role'] ?? '') !== 'admin') {
+if (!$user) {
     http_response_code(403);
-    exit('Nur für angemeldete Administratoren.');
+    exit('Bitte zuerst in der Projektzentrale anmelden.');
 }
+
 $pdo = db();
 $message = '';
 $error = '';
+$csrf = csrf_token();
+
+$adminCount = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
+
+if (($user['role'] ?? '') !== 'admin') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['do'] ?? '') === 'recover_admin') {
+        $token = (string)($_POST['csrf'] ?? '');
+        if (!verify_csrf($token)) {
+            $error = 'Sicherheitsprüfung fehlgeschlagen.';
+        } elseif ($adminCount !== 0) {
+            $error = 'Es existiert bereits ein aktives Admin-Konto. Bitte mit diesem Konto anmelden.';
+        } else {
+            $pdo->prepare("UPDATE users SET role='admin', active=1, updated_at=NOW() WHERE id=?")
+                ->execute([(int)$user['id']]);
+            $message = 'Dein Konto wurde als Administrator wiederhergestellt.';
+            $user = session_user();
+            $adminCount = 1;
+        }
+    }
+
+    if (($user['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        ?>
+        <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin-Zugang</title><style>
+        body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f8;color:#171729;margin:0}.wrap{max-width:720px;margin:auto;padding:36px 16px}.card{background:#fff;border:1px solid #e6e6ee;border-radius:20px;padding:24px}.muted{color:#6f6d80;line-height:1.55}.warn{background:#fff6e8;color:#7b4b00;padding:14px 16px;border-radius:12px;margin:16px 0}.err{background:#fff0f0;color:#962d2d;padding:14px 16px;border-radius:12px;margin:16px 0}.btn{display:inline-block;border:0;border-radius:12px;padding:12px 16px;background:#17152e;color:#fff;font:inherit;font-weight:800;cursor:pointer}.meta{padding:12px 14px;border-radius:12px;background:#f4f3f8;margin:14px 0}.meta strong{display:block;margin-bottom:3px}
+        </style></head><body><main class="wrap"><div class="card"><small>Projektzentrale</small><h1>Kein Admin-Zugriff</h1>
+        <p class="muted">Du bist angemeldet, aber dein aktuelles Konto hat die Rolle <strong><?=htmlspecialchars((string)($user['role'] ?? 'unbekannt'), ENT_QUOTES, 'UTF-8')?></strong>.</p>
+        <div class="meta"><strong>Angemeldetes Konto</strong><?=htmlspecialchars((string)$user['email'], ENT_QUOTES, 'UTF-8')?></div>
+        <?php if($error):?><div class="err"><?=htmlspecialchars($error, ENT_QUOTES, 'UTF-8')?></div><?php endif;?>
+        <?php if($adminCount===0):?>
+            <div class="warn">In der Datenbank existiert aktuell <strong>kein aktives Admin-Konto</strong>. Deshalb kannst du dein bereits angemeldetes Konto einmalig zum Administrator machen.</div>
+            <form method="post"><input type="hidden" name="csrf" value="<?=htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8')?>"><input type="hidden" name="do" value="recover_admin"><button class="btn" type="submit">Mein Konto als Admin wiederherstellen</button></form>
+        <?php else:?>
+            <div class="warn">Es existiert bereits mindestens ein aktives Admin-Konto. Aus Sicherheitsgründen kann sich ein normales Konto dann nicht selbst zum Admin machen.</div>
+            <p class="muted">Wenn du eigentlich der Administrator sein solltest, melde dich mit dem beim Setup angelegten Admin-Konto an oder ändere die Rolle des richtigen Kontos in der Datenbank.</p>
+        <?php endif;?>
+        <p><a href="../">← Zur Projektzentrale</a></p></div></main></body></html>
+        <?php
+        exit;
+    }
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $token = (string)($_POST['csrf'] ?? '');
     if (!verify_csrf($token)) {
@@ -45,7 +88,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 $users = $pdo->query('SELECT id,email,name,role,active,last_login_at FROM users ORDER BY name,email')->fetchAll();
 function h2(string $v): string { return htmlspecialchars($v, ENT_QUOTES, 'UTF-8'); }
-$csrf = csrf_token();
 ?>
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Benutzerverwaltung</title><style>
 body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f8;color:#171729;margin:0}.wrap{max-width:1000px;margin:auto;padding:30px 16px}.card{background:#fff;border:1px solid #e6e6ee;border-radius:20px;padding:22px;margin-bottom:18px}h1{margin:.2em 0}.grid{display:grid;grid-template-columns:2fr 2fr 1.4fr 1fr auto;gap:10px;align-items:end}input,select,button{font:inherit;padding:11px 12px;border-radius:10px;border:1px solid #d9d8e4}button{cursor:pointer;background:#17152e;color:#fff;border:0;font-weight:700}label{display:grid;gap:6px;font-size:.85rem;font-weight:700}.row{display:grid;grid-template-columns:1.3fr 1.6fr .8fr .7fr 1.6fr;gap:10px;padding:12px 0;border-top:1px solid #eee;align-items:center}.muted{color:#777}.ok{color:#27623b}.err{color:#9a2d2d}.inline{display:flex;gap:8px}.inline input{min-width:0}@media(max-width:760px){.grid,.row{grid-template-columns:1fr}.row{padding:18px 0}.inline{flex-wrap:wrap}}
