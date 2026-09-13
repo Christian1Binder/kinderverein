@@ -46,8 +46,12 @@ export async function signInWithEmail(email) {
   if (!supabase) throw new Error('Cloud-Modus ist nicht konfiguriert.')
   const redirectTo = window.location.origin + window.location.pathname
   const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: redirectTo },
+    email: email.trim().toLowerCase(),
+    options: {
+      emailRedirectTo: redirectTo,
+      // Produktivbetrieb: Nur bereits angelegte/eingeladene Teamkonten duerfen sich anmelden.
+      shouldCreateUser: false,
+    },
   })
   if (error) throw error
 }
