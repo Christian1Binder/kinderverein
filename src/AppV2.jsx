@@ -418,16 +418,27 @@ function Documents({ project, user, mutate, setToast }) {
   </div>
 }
 
-function downloadEditableDocument(title, html) {
+function editableDocumentFile(title, html) {
   const filename = `${safeFile(title || 'dokument')}.doc`
   const body = `<!doctype html><html><head><meta charset="utf-8"><title>${title || 'Dokument'}</title><style>body{font-family:Arial,sans-serif;line-height:1.6;margin:40px}h1,h2,h3{margin-top:1.4em}</style></head><body>${html || '<p></p>'}</body></html>`
-  const blob = new Blob(['\ufeff', body], { type: 'application/msword;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
+  return new File(['\ufeff', body], filename, { type: 'application/msword;charset=utf-8' })
+}
+
+function downloadEditableDocument(title, html) {
+  const file = editableDocumentFile(title, html)
+  const url = URL.createObjectURL(file)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename
+  a.download = file.name
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function finalDocumentFolder(project, doc) {
+  const haystack = `${doc.category || ''} ${doc.title || ''}`.toLowerCase()
+  if (haystack.includes('satzung') || haystack.includes('recht')) return project.folders.find((f) => f.id === 'folder-satzung')?.id
+  if (haystack.includes('finanz') || haystack.includes('steuer')) return project.folders.find((f) => f.id === 'folder-finanzamt')?.id
+  return project.folders.find((f) => f.id === 'folder-gruendung')?.id || project.folders[0]?.id || ''
 }
 
 function DocumentEditor({ doc, user, project, mutate }) {
@@ -435,6 +446,7 @@ function DocumentEditor({ doc, user, project, mutate }) {
   const [title, setTitle] = useState(doc.title)
   const [comment, setComment] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [finalizing, setFinalizing] = useState(false)
   const editor = useEditor({ extensions: [StarterKit, Placeholder.configure({ placeholder: 'Gemeinsam formulieren …' })], content: doc.content || '<p></p>', editable: canEdit })
 
   useEffect(() => { if (editor && editor.getHTML() !== (doc.content || '<p></p>')) editor.commands.setContent(doc.content || '<p></p>') }, [doc.id])
@@ -462,7 +474,38 @@ function DocumentEditor({ doc, user, project, mutate }) {
 
   const download = () => downloadEditableDocument(title || doc.title, editor?.getHTML() || doc.content || '')
 
-  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={download}><Download size={16} /> Download</button><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
+  const finalizeToFiles = async () => {
+    if (!canEdit || finalizing) return
+    const finalTitle = title.trim() || doc.title || 'Dokument'
+    const html = editor?.getHTML() || doc.content || ''
+    if (!window.confirm(`„${finalTitle}“ finalisieren und als feste Datei unter „Dateien“ ablegen? Das Arbeitsdokument bleibt erhalten.`)) return
+    setFinalizing(true)
+    try {
+      const file = editableDocumentFile(`${finalTitle} – final`, html)
+      const meta = await uploadProjectFile(file)
+      const folderId = finalDocumentFolder(project, { ...doc, title: finalTitle })
+      mutate((p) => {
+        const target = p.documents.find((d) => d.id === doc.id)
+        if (target) {
+          if (target.content !== html || target.title !== finalTitle) target.versions.unshift({ id: uid('v'), content: target.content || '', title: target.title, author: user.name || user.email, email: user.email, createdAt: nowIso() })
+          target.content = html
+          target.title = finalTitle
+          target.status = 'final'
+          target.finalizedAt = nowIso()
+          target.finalizedBy = user.name || user.email
+          target.updatedAt = nowIso()
+          target.updatedBy = user.name || user.email
+        }
+        p.files.unshift({ ...meta, folderId, source: 'finalized-document', sourceDocumentId: doc.id, finalizedAt: nowIso(), finalizedBy: user.name || user.email })
+      }, `Dokument „${finalTitle}“ finalisiert und unter Dateien abgelegt`)
+    } catch (error) {
+      window.alert(error.message || 'Finalisierung fehlgeschlagen.')
+    } finally {
+      setFinalizing(false)
+    }
+  }
+
+  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{doc.status === 'final' ? `Finalisiert${doc.finalizedBy ? ` · von ${doc.finalizedBy}` : ''}` : canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={download}><Download size={16} /> Download</button><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className="secondary-btn" disabled={finalizing} onClick={finalizeToFiles}><Folder size={16} /> {finalizing ? 'Wird abgelegt …' : 'Finalisieren & ablegen'}</button>}{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
     <div className="editor-toolbar"><button disabled={!canEdit} className={editor?.isActive('bold') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={16} /></button><button disabled={!canEdit} className={editor?.isActive('italic') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={16} /></button><span /><button disabled={!canEdit} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div>
     <EditorContent editor={editor} className="rich-editor" />
     <div className="editor-meta"><div><MessageSquare size={16} /><strong>Kommentare</strong></div><div className="comment-list">{doc.comments.map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span><small>{fmtDateTime(c.createdAt)}</small></div>)}</div>{canEdit && <form className="comment-form" onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.documents.find((d) => d.id === doc.id).comments.push({ id: uid('dc'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${doc.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar oder Hinweis ergänzen …" /><button className="secondary-btn">Senden</button></form>}</div>
