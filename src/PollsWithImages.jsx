@@ -23,7 +23,7 @@ function optionImageSrc(option) {
   return ''
 }
 
-export default function PollsWithImages({ project, user, mutate, setToast }) {
+export default function PollsWithImages({ project, user, mutate, setToast, canCreate = true }) {
   const [showNew, setShowNew] = useState(false)
   const [busy, setBusy] = useState(false)
   const [title, setTitle] = useState('')
@@ -122,10 +122,10 @@ export default function PollsWithImages({ project, user, mutate, setToast }) {
   return <div className="page polls-v3">
     <div className="page-header">
       <div><p className="eyebrow">GEMEINSAM ENTSCHEIDEN</p><h1>Umfragen</h1><p>Text oder Bild: Varianten direkt miteinander vergleichen und transparent abstimmen.</p></div>
-      <button className="primary-btn" onClick={() => setShowNew((value) => !value)}><Plus size={16} /> Umfrage</button>
+      {canCreate && <button className="primary-btn" onClick={() => setShowNew((value) => !value)}><Plus size={16} /> Umfrage</button>}
     </div>
 
-    {showNew && <form className="card visual-poll-builder" onSubmit={create}>
+    {canCreate && showNew && <form className="card visual-poll-builder" onSubmit={create}>
       <div className="poll-builder-head"><div><span className="eyebrow">NEUE UMFRAGE</span><h3>Antwortoptionen mit oder ohne Bild</h3><p>Für Logo-, Farb- oder Designabstimmungen kannst du jeder Option ein Bild hinzufügen.</p></div><ImageIcon size={24} /></div>
       <div className="poll-builder-basics">
         <label>Titel<input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="z. B. Welches Logo passt am besten zu WeKiB?" /></label>

@@ -16,6 +16,7 @@ import {
   uploadProjectFile,
 } from './lib/projectStore.js'
 import PollsWithImages from './PollsWithImages.jsx'
+import AdminBackend from './AdminBackend.jsx'
 
 const NAV = [
   ['dashboard', 'Übersicht', LayoutDashboard],
@@ -90,10 +91,24 @@ function memberKind(project, user) {
   return getProfile(project, user)?.kind || 'founder'
 }
 
+const DEFAULT_ACCESS = {
+  founder: { documents_edit: true, documents_finalize: true, files_manage: true, tasks_manage: true, polls_create: true, calendar_manage: true, decisions_manage: true, cms_manage: false },
+  member: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
+  viewer: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
+}
+
+function hasPermission(project, user, key) {
+  if (!user) return false
+  if (user.role === 'admin') return true
+  if (user.role === 'viewer') return false
+  const profile = getProfile(project, user)
+  if (profile?.permissions && Object.prototype.hasOwnProperty.call(profile.permissions, key)) return Boolean(profile.permissions[key])
+  return Boolean((DEFAULT_ACCESS[profile?.kind || 'member'] || DEFAULT_ACCESS.member)[key])
+}
+
 function canEditDocument(project, user, doc) {
-  const kind = memberKind(project, user)
   if (user?.role === 'viewer') return false
-  return user?.role === 'admin' || kind === 'founder' || doc.createdByEmail === user?.email
+  return hasPermission(project, user, 'documents_edit') || doc.createdByEmail === user?.email
 }
 
 function AppV2() {
@@ -234,7 +249,7 @@ function AppV2() {
           {NAV.map(([id, label, Icon]) => (
             <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => go(id)}><Icon size={18} /><span>{label}</span></button>
           ))}
-          {user.role === 'admin' && <button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><SlidersHorizontal size={18} /><span>Studio</span></button>}
+          {(user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><Shield size={18} /><span>Admin</span></button>}
         </nav>
         <div className="sidebar-foot">
           <button className={`profile-chip ${page === 'profile' ? 'active' : ''}`} onClick={() => go('profile')}>
@@ -267,12 +282,12 @@ function AppV2() {
           {page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
           {page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
-          {page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} />}
+          {page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate={hasPermission(project, user, 'polls_create')} />}
           {page === 'calendar' && <Calendar project={project} user={user} mutate={mutate} />}
           {page === 'members' && <Members project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'decisions' && <Decisions project={project} user={user} mutate={mutate} />}
           {page === 'activity' && <ActivityPage project={project} />}
-          {page === 'studio' && user.role === 'admin' && <Studio project={project} mutate={mutate} />}
+          {page === 'studio' && (user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'profile' && <Profile project={project} user={user} mutate={mutate} />}
         </div>
       </main>
@@ -339,18 +354,19 @@ function DashboardCard({ title, action, children }) { return <section className=
 function PriorityBadge({ value }) { return <span className={`priority ${value || 'medium'}`}>{value === 'high' ? 'hoch' : value === 'low' ? 'niedrig' : 'mittel'}</span> }
 
 function Tasks({ project, user, mutate }) {
+  const canManage = hasPermission(project, user, 'tasks_manage')
   const [newTitle, setNewTitle] = useState('')
   const columns = [['todo', 'Offen'], ['doing', 'In Arbeit'], ['done', 'Erledigt']]
   const add = (e) => { e.preventDefault(); if (!newTitle.trim()) return; mutate((p) => p.tasks.unshift({ id: uid('task'), title: newTitle.trim(), status: 'todo', priority: 'medium', owner: user.name || user.email, due: '', tags: [], comments: [] }), `Aufgabe „${newTitle.trim()}“ angelegt`); setNewTitle('') }
-  return <div className="page"><PageHeader eyebrow="ARBEITSFLUSS" title="Aufgaben" description="Kanban für alles, was bis zur Gründung erledigt werden muss." action={<form className="quick-add" onSubmit={add}><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Neue Aufgabe …" /><button className="primary-btn"><Plus size={16} /> Anlegen</button></form>} />
-    <div className="kanban">{columns.map(([status, label]) => <section className="kanban-column" key={status}><div className="kanban-head"><span>{label}</span><b>{project.tasks.filter((t) => t.status === status).length}</b></div>{project.tasks.filter((t) => t.status === status).map((task) => <TaskCard key={task.id} task={task} mutate={mutate} user={user} />)}</section>)}</div>
+  return <div className="page"><PageHeader eyebrow="ARBEITSFLUSS" title="Aufgaben" description="Kanban für alles, was bis zur Gründung erledigt werden muss." action={canManage ? <form className="quick-add" onSubmit={add}><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Neue Aufgabe …" /><button className="primary-btn"><Plus size={16} /> Anlegen</button></form> : null} />
+    <div className="kanban">{columns.map(([status, label]) => <section className="kanban-column" key={status}><div className="kanban-head"><span>{label}</span><b>{project.tasks.filter((t) => t.status === status).length}</b></div>{project.tasks.filter((t) => t.status === status).map((task) => <TaskCard key={task.id} task={task} mutate={mutate} user={user} canManage={canManage} />)}</section>)}</div>
   </div>
 }
 
-function TaskCard({ task, mutate, user }) {
+function TaskCard({ task, mutate, user, canManage }) {
   const [comment, setComment] = useState('')
   const nextStatus = task.status === 'todo' ? 'doing' : task.status === 'doing' ? 'done' : 'todo'
-  return <article className="task-card"><div className="task-top"><PriorityBadge value={task.priority} /><button className="icon-btn mini" onClick={() => mutate((p) => { p.tasks = p.tasks.filter((t) => t.id !== task.id) }, `Aufgabe „${task.title}“ entfernt`)}><Trash2 size={14} /></button></div><h4>{task.title}</h4><p>{task.owner || 'Nicht zugewiesen'} {task.due ? `· ${fmtDate(task.due)}` : ''}</p><div className="task-foot"><button onClick={() => mutate((p) => { p.tasks.find((t) => t.id === task.id).status = nextStatus }, `Status von „${task.title}“ geändert`)}>{task.status === 'done' ? 'Wieder öffnen' : 'Weiter'} <ChevronRight size={14} /></button><span><MessageSquare size={14} /> {task.comments?.length || 0}</span></div><details className="comments"><summary>Kommentare</summary><div className="comment-list">{(task.comments || []).map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span></div>)}</div><form onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.tasks.find((t) => t.id === task.id).comments.push({ id: uid('c'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${task.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar …" /></form></details></article>
+  return <article className="task-card"><div className="task-top"><PriorityBadge value={task.priority} />{canManage && <button className="icon-btn mini" onClick={() => mutate((p) => { p.tasks = p.tasks.filter((t) => t.id !== task.id) }, `Aufgabe „${task.title}“ entfernt`)}><Trash2 size={14} /></button>}</div><h4>{task.title}</h4><p>{task.owner || 'Nicht zugewiesen'} {task.due ? `· ${fmtDate(task.due)}` : ''}</p><div className="task-foot">{canManage && <button onClick={() => mutate((p) => { p.tasks.find((t) => t.id === task.id).status = nextStatus }, `Status von „${task.title}“ geändert`)}>{task.status === 'done' ? 'Wieder öffnen' : 'Weiter'} <ChevronRight size={14} /></button>}<span><MessageSquare size={14} /> {task.comments?.length || 0}</span></div><details className="comments"><summary>Kommentare</summary><div className="comment-list">{(task.comments || []).map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span></div>)}</div><form onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.tasks.find((t) => t.id === task.id).comments.push({ id: uid('c'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${task.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar …" /></form></details></article>
 }
 
 function Documents({ project, user, mutate, setToast }) {
@@ -443,6 +459,7 @@ function finalDocumentFolder(project, doc) {
 
 function DocumentEditor({ doc, user, project, mutate }) {
   const canEdit = canEditDocument(project, user, doc)
+  const canFinalize = hasPermission(project, user, 'documents_finalize')
   const [title, setTitle] = useState(doc.title)
   const [comment, setComment] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -475,7 +492,7 @@ function DocumentEditor({ doc, user, project, mutate }) {
   const download = () => downloadEditableDocument(title || doc.title, editor?.getHTML() || doc.content || '')
 
   const finalizeToFiles = async () => {
-    if (!canEdit || finalizing) return
+    if (!canFinalize || finalizing) return
     const finalTitle = title.trim() || doc.title || 'Dokument'
     const html = editor?.getHTML() || doc.content || ''
     if (!window.confirm(`„${finalTitle}“ finalisieren und als feste Datei unter „Dateien“ ablegen? Das Arbeitsdokument bleibt erhalten.`)) return
@@ -505,7 +522,7 @@ function DocumentEditor({ doc, user, project, mutate }) {
     }
   }
 
-  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{doc.status === 'final' ? `Finalisiert${doc.finalizedBy ? ` · von ${doc.finalizedBy}` : ''}` : canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={download}><Download size={16} /> Download</button><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className="secondary-btn" disabled={finalizing} onClick={finalizeToFiles}><Folder size={16} /> {finalizing ? 'Wird abgelegt …' : 'Finalisieren & ablegen'}</button>}{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
+  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{doc.status === 'final' ? `Finalisiert${doc.finalizedBy ? ` · von ${doc.finalizedBy}` : ''}` : canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={download}><Download size={16} /> Download</button><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canFinalize && <button className="secondary-btn" disabled={finalizing} onClick={finalizeToFiles}><Folder size={16} /> {finalizing ? 'Wird abgelegt …' : 'Finalisieren & ablegen'}</button>}{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
     <div className="editor-toolbar"><button disabled={!canEdit} className={editor?.isActive('bold') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={16} /></button><button disabled={!canEdit} className={editor?.isActive('italic') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={16} /></button><span /><button disabled={!canEdit} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div>
     <EditorContent editor={editor} className="rich-editor" />
     <div className="editor-meta"><div><MessageSquare size={16} /><strong>Kommentare</strong></div><div className="comment-list">{doc.comments.map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span><small>{fmtDateTime(c.createdAt)}</small></div>)}</div>{canEdit && <form className="comment-form" onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.documents.find((d) => d.id === doc.id).comments.push({ id: uid('dc'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${doc.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar oder Hinweis ergänzen …" /><button className="secondary-btn">Senden</button></form>}</div>
@@ -530,6 +547,7 @@ function UploadedDocumentPanel({ file, user, mutate, setToast, setSelectedKey })
 }
 
 function Files({ project, user, mutate, setToast }) {
+  const canManage = hasPermission(project, user, 'files_manage')
   const [folderId, setFolderId] = useState(project.folders[0]?.id || '')
   const [busy, setBusy] = useState(false)
   const inputRef = useRef(null)
@@ -548,7 +566,7 @@ function Files({ project, user, mutate, setToast }) {
   }
   const addFolder = () => { const name = window.prompt('Name des neuen Ordners'); if (name?.trim()) mutate((p) => p.folders.push({ id: uid('folder'), name: name.trim() }), `Ordner „${name.trim()}“ angelegt`) }
   const files = project.files.filter((f) => f.folderId === folderId)
-  return <div className="page"><PageHeader eyebrow="GEMEINSAME ABLAGE" title="Dateien" description="Ordnerstruktur für Gründungsunterlagen, Anlagen und externe Dokumente." action={<div className="header-actions"><button className="secondary-btn" onClick={addFolder}><Plus size={16} /> Ordner</button><label className={`primary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> {busy ? 'Lädt …' : 'Hochladen'}<input ref={inputRef} hidden type="file" onChange={(e) => upload(e.target.files?.[0])} /></label></div>} />
+  return <div className="page"><PageHeader eyebrow="GEMEINSAME ABLAGE" title="Dateien" description="Ordnerstruktur für Gründungsunterlagen, Anlagen und externe Dokumente." action={canManage ? <div className="header-actions"><button className="secondary-btn" onClick={addFolder}><Plus size={16} /> Ordner</button><label className={`primary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> {busy ? 'Lädt …' : 'Hochladen'}<input ref={inputRef} hidden type="file" onChange={(e) => upload(e.target.files?.[0])} /></label></div> : null} />
     <div className="files-layout"><aside className="folder-list">{project.folders.map((folder) => <button className={folder.id === folderId ? 'active' : ''} key={folder.id} onClick={() => setFolderId(folder.id)}><Folder size={17} /><span>{folder.name}</span><b>{project.files.filter((f) => f.folderId === folder.id).length}</b></button>)}</aside><section className="file-browser"><div className="file-head"><strong>{project.folders.find((f) => f.id === folderId)?.name}</strong><span>{files.length} Dateien</span></div>{files.length ? files.map((file) => <div className="file-row" key={file.id}><div className="file-icon"><FileText size={19} /></div><div><strong>{file.name}</strong><span>{formatBytes(file.size)} · {file.uploadedBy || user.name} · {fmtDateTime(file.uploadedAt)}</span></div><a className="icon-btn" href={fileDownloadUrl(file.id)} title="Herunterladen"><Download size={17} /></a><button className="icon-btn" onClick={() => remove(file)}><Trash2 size={16} /></button></div>) : <EmptyState text="Dieser Ordner ist noch leer." />}</section></div>
   </div>
 }
@@ -568,11 +586,12 @@ function PollCard({ poll, user, mutate }) {
 }
 
 function Calendar({ project, user, mutate }) {
+  const canManage = hasPermission(project, user, 'calendar_manage')
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState({ title: '', date: '', time: '', category: 'Gründung' })
   const events = [...project.events].sort((a, b) => String(a.date).localeCompare(String(b.date)))
   const add = (e) => { e.preventDefault(); if (!form.title || !form.date) return; mutate((p) => p.events.push({ id: uid('event'), ...form, createdBy: user.email }), `Termin „${form.title}“ angelegt`); setForm({ title: '', date: '', time: '', category: 'Gründung' }); setShowNew(false) }
-  return <div className="page"><PageHeader eyebrow="ZEIT & FRISTEN" title="Termine" description="Gründungsversammlung, Fristen, Abstimmungen und externe Termine im Blick." action={<div className="header-actions"><button className="secondary-btn" onClick={() => downloadIcs(events, 'wekib-gruendung.ics')}><Download size={16} /> iCal exportieren</button><button className="primary-btn" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Termin</button></div>} />{showNew && <form className="card form-row" onSubmit={add}><input placeholder="Titel" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /><input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /><button className="primary-btn">Speichern</button></form>}<div className="timeline-calendar">{events.length ? events.map((event) => <article key={event.id}><div className="date-tile large"><strong>{new Date(event.date).getDate()}</strong><span>{new Intl.DateTimeFormat('de-DE', { month: 'short' }).format(new Date(event.date))}</span></div><div><span className="eyebrow">{event.category}</span><h3>{event.title}</h3><p>{event.time || 'Ganztägig'} {event.notes ? `· ${event.notes}` : ''}</p></div><button className="icon-btn" title="Als iCal" onClick={() => downloadIcs([event], `${safeFile(event.title)}.ics`)}><Download size={17} /></button></article>) : <EmptyState text="Noch keine Termine angelegt." />}</div></div>
+  return <div className="page"><PageHeader eyebrow="ZEIT & FRISTEN" title="Termine" description="Gründungsversammlung, Fristen, Abstimmungen und externe Termine im Blick." action={<div className="header-actions"><button className="secondary-btn" onClick={() => downloadIcs(events, 'wekib-gruendung.ics')}><Download size={16} /> iCal exportieren</button>{canManage && <button className="primary-btn" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Termin</button>}</div>} />{showNew && <form className="card form-row" onSubmit={add}><input placeholder="Titel" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /><input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /><input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /><button className="primary-btn">Speichern</button></form>}<div className="timeline-calendar">{events.length ? events.map((event) => <article key={event.id}><div className="date-tile large"><strong>{new Date(event.date).getDate()}</strong><span>{new Intl.DateTimeFormat('de-DE', { month: 'short' }).format(new Date(event.date))}</span></div><div><span className="eyebrow">{event.category}</span><h3>{event.title}</h3><p>{event.time || 'Ganztägig'} {event.notes ? `· ${event.notes}` : ''}</p></div><button className="icon-btn" title="Als iCal" onClick={() => downloadIcs([event], `${safeFile(event.title)}.ics`)}><Download size={17} /></button></article>) : <EmptyState text="Noch keine Termine angelegt." />}</div></div>
 }
 
 function Members({ project, user, mutate, setToast }) {
@@ -621,10 +640,11 @@ function Profile({ project, user, mutate }) {
 }
 
 function Decisions({ project, user, mutate }) {
+  const canManage = hasPermission(project, user, 'decisions_manage')
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState({ title: '', decision: '', date: new Date().toISOString().slice(0, 10) })
   const add = (e) => { e.preventDefault(); if (!form.title || !form.decision) return; mutate((p) => p.decisions.unshift({ id: uid('decision'), ...form, author: user.name || user.email, createdAt: nowIso() }), `Entscheidung „${form.title}“ dokumentiert`); setShowNew(false); setForm({ title: '', decision: '', date: new Date().toISOString().slice(0, 10) }) }
-  return <div className="page"><PageHeader eyebrow="NACHVOLLZIEHBAR ENTSCHEIDEN" title="Entscheidungsregister" description="Was wurde wann und warum beschlossen? Eine klare Spur durch die Gründungsphase." action={<button className="primary-btn" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Entscheidung</button>} />{showNew && <form className="card form-grid" onSubmit={add}><label>Titel<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label><label>Entscheidung<textarea value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value })} /></label><label>Datum<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label><button className="primary-btn">Dokumentieren</button></form>}<div className="decision-list">{project.decisions.length ? project.decisions.map((d) => <article className="card decision" key={d.id}><div className="decision-index"><Gavel size={18} /></div><div><span>{fmtDate(d.date)} · {d.author}</span><h3>{d.title}</h3><p>{d.decision}</p></div></article>) : <EmptyState text="Noch keine Entscheidung dokumentiert." />}</div></div>
+  return <div className="page"><PageHeader eyebrow="NACHVOLLZIEHBAR ENTSCHEIDEN" title="Entscheidungsregister" description="Was wurde wann und warum beschlossen? Eine klare Spur durch die Gründungsphase." action={canManage ? <button className="primary-btn" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Entscheidung</button> : null} />{showNew && <form className="card form-grid" onSubmit={add}><label>Titel<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label><label>Entscheidung<textarea value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value })} /></label><label>Datum<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label><button className="primary-btn">Dokumentieren</button></form>}<div className="decision-list">{project.decisions.length ? project.decisions.map((d) => <article className="card decision" key={d.id}><div className="decision-index"><Gavel size={18} /></div><div><span>{fmtDate(d.date)} · {d.author}</span><h3>{d.title}</h3><p>{d.decision}</p></div></article>) : <EmptyState text="Noch keine Entscheidung dokumentiert." />}</div></div>
 }
 
 function ActivityPage({ project }) { return <div className="page narrow"><PageHeader eyebrow="TRANSPARENZ" title="Aktivitätsverlauf" description="Wer hat wann etwas im gemeinsamen Projekt verändert?" /><section className="card"><Timeline items={project.activities} /></section></div> }
@@ -640,7 +660,7 @@ function Studio({ project, mutate }) {
 function Onboarding({ project, user, mutate, kind }) {
   const steps = kind === 'admin' ? [
     ['Willkommen im Cockpit', 'Du verwaltest Struktur, Zugänge und den gemeinsamen Arbeitsraum.'],
-    ['Studio & Module', 'Unter „Studio“ stellst du das Dashboard für den Gründungskreis zusammen.'],
+    ['Admin-Backend', 'Unter „Admin“ verwaltest du Zugänge, Sonderrechte und das gemeinsame Dashboard.'],
     ['Zugänge', 'Unter „Mitglieder“ legst du Gründungsmitglieder und weitere Nutzer an.'],
   ] : kind === 'founder' ? [
     ['Willkommen im Gründungskreis', 'Du kannst gemeinsame Dokumente bearbeiten, abstimmen und Aufgaben übernehmen.'],
