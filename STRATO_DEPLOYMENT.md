@@ -1,81 +1,97 @@
-# STRATO-Produktivbetrieb
+# STRATO: LAB und PROD
 
-Die Projektzentrale ist als statische React/Vite-App gebaut. Auf klassischem STRATO-Webhosting muss deshalb **kein Node.js-Server** laufen. STRATO liefert nur die fertigen HTML-, CSS- und JavaScript-Dateien aus. Die gemeinsamen Projektdaten, Anmeldung und Live-Synchronisierung laufen über Supabase.
+Die Projektzentrale läuft auf klassischem STRATO-Webhosting als gebaute React/Vite-App plus PHP-Backend. Login und gemeinsame Projektdaten liegen in einer STRATO-MySQL/MariaDB-Datenbank. GitHub enthält Quellcode und Deployment-Workflows, aber keine Datenbank-Passwörter.
 
 ## Zielarchitektur
 
-- **STRATO Webhosting:** Website / Frontend
-- **Supabase Auth:** Login per Magic Link
-- **Supabase Postgres + RLS:** gemeinsamer Projektstand
-- **Supabase Realtime:** Änderungen für andere angemeldete Teammitglieder sichtbar
-- **GitHub:** Quellcode, Builds und optional automatische SFTP-Auslieferung
+Es gibt zwei vollständig getrennte Umgebungen:
 
-## 1. Supabase-Projekt einrichten
+### LAB / Test
 
-1. Ein eigenes Supabase-Projekt nur für diese Projektzentrale anlegen.
-2. `supabase/schema.sql` im Supabase SQL Editor ausführen.
-3. Unter Authentication die Produktiv-Domain als **Site URL** setzen, z. B. `https://projekt.example.de/`.
-4. Dieselbe URL als erlaubte Redirect URL hinterlegen.
-5. Teammitglieder in Supabase Auth anlegen bzw. einladen.
+- Beispiel: `http://betruungmachtschule.binder-lab.com/`
+- eigener STRATO-Webordner
+- eigene LAB-Datenbank
+- eigenes `api/private/config.php`
+- neue Quellcode-Änderungen dürfen hier automatisch veröffentlicht werden
+- LAB-Builds zeigen rechts oben den Hinweis `LAB · TESTUMGEBUNG`
 
-Die Anwendung nutzt `shouldCreateUser: false`. Eine beliebige E-Mail-Adresse kann daher über das Login-Formular **kein neues Konto selbst anlegen**. Nur bereits angelegte/eingeladene Nutzer können einen Magic Link erhalten und auf den gemeinsamen Datenbestand zugreifen.
+### PROD / Live
 
-## 2. GitHub Secrets für den Cloud-Build
+- spätere endgültige Domain oder Subdomain
+- eigener STRATO-Webordner
+- eigene PROD-Datenbank
+- eigenes `api/private/config.php`
+- keine automatische Veröffentlichung bei normalen Code-Änderungen
+- veröffentlicht wird ausschließlich eine ausdrücklich freigegebene, zuvor im LAB getestete Git-Commit-Version
 
-Im Repository unter **Settings → Secrets and variables → Actions** anlegen:
+LAB und PROD dürfen niemals dieselbe Datenbank verwenden. Dadurch können Tests, Benutzerkonten und Testdaten die Live-Daten nicht beschädigen.
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+## GitHub Workflows
 
-Nur die Publishable-/Anon-Konfiguration gehört in den Browser-Build. **Nie** einen Supabase Secret Key oder Service-Role-Key in GitHub Pages, STRATO-Dateien oder Frontend-Code eintragen.
+### `Build STRATO package`
 
-Sobald diese beiden Secrets vorhanden sind, erzeugt `.github/workflows/build-strato.yml` bei Quellcode-Änderungen automatisch ein fertiges Artifact `kinderverein-strato`.
+Erzeugt nur ein ZIP/Artifact. Dieser Workflow veröffentlicht nichts auf STRATO.
 
-## 3. STRATO per SFTP anbinden
+### `Deploy LAB to STRATO`
 
-Optional für automatische Deployments zusätzlich folgende GitHub Secrets hinterlegen:
+Wird bei relevanten Änderungen auf `main` automatisch gebaut. Sind die LAB-SFTP-Secrets vorhanden, wird die neue Version anschließend auf die LAB-Seite übertragen. `api/private/config.php` wird beim Deployment nicht überschrieben.
 
-- `STRATO_HOST` – personalisierter SFTP-Server aus dem STRATO Kunden-Login
-- `STRATO_USER` – SFTP-Benutzername
-- `STRATO_PASSWORD` – SFTP-Passwort
-- `STRATO_REMOTE_PATH` – Zielverzeichnis der Domain, z. B. `.` oder ein Unterordner
+Ein erneuter LAB-Deploy ohne Codeänderung kann durch eine Änderung an `.deploy/lab-trigger.txt` ausgelöst werden.
 
-Sind diese Werte vorhanden, lädt GitHub Actions den fertigen `dist-strato`-Build per SFTP auf Port 22 hoch. Fehlen die SFTP-Daten, wird nur das fertige Artifact erzeugt und kann manuell heruntergeladen und per SFTP hochgeladen werden.
+### `Deploy tested version to PROD`
 
-## 4. Manuell bauen
+PROD wird nicht bei normalen Änderungen aktualisiert. In `.deploy/production-source.txt` wird die exakte 40-stellige Commit-SHA der im LAB geprüften Version eingetragen. Nur eine Änderung dieser Datei startet den Produktions-Workflow.
 
-Lokal eine `.env.production` anhand von `.env.example` anlegen und dann:
+Der Produktions-Workflow checkt exakt diese Commit-Version aus, baut sie neu für PROD und lädt sie hoch. Dadurch kann nicht versehentlich ein neuerer, noch ungeprüfter Stand live gehen.
 
-```bash
-npm install
-npm run build:strato
-```
+## GitHub Secrets
 
-Der komplette Inhalt von `dist-strato/` wird anschließend in das STRATO-Webverzeichnis der gewünschten Domain geladen.
+Unter **Repository → Settings → Secrets and variables → Actions** werden folgende Werte einmalig hinterlegt.
 
-Der STRATO-Build verwendet relative Asset-Pfade. Dadurch funktioniert er sowohl direkt unter einer Domain als auch in einem Unterordner.
+### LAB
 
-## 5. Benutzerzugang
+- `STRATO_LAB_HOST`
+- `STRATO_LAB_USER`
+- `STRATO_LAB_PASSWORD`
+- `STRATO_LAB_REMOTE_PATH`
 
-Der produktive gemeinsame Datenbestand ist über Supabase Row-Level-Security nur für `authenticated` Nutzer freigegeben. Das Frontend zeigt bei aktiver Cloud-Konfiguration zunächst den Team-Login.
+### PROD
 
-Die Teamliste innerhalb der Projektzentrale und die Supabase-Auth-Konten sind bewusst getrennt:
+- `STRATO_PROD_HOST`
+- `STRATO_PROD_USER`
+- `STRATO_PROD_PASSWORD`
+- `STRATO_PROD_REMOTE_PATH`
 
-- **Teamliste:** Projektrolle, Verantwortungsbereich, Kontaktinformationen
-- **Supabase Auth:** tatsächliche Zugangsberechtigung zur gemeinsamen Datenbank
+Die Werte werden niemals in Quellcode oder Chat geschrieben.
 
-Ein Teammitglied sollte daher erst in Supabase Auth angelegt/eingeladen und danach in der Projektzentrale als Person mit Rolle hinterlegt werden.
+Am einfachsten sind zwei getrennte STRATO-SFTP-Zugänge, deren Startverzeichnis jeweils direkt auf den LAB- bzw. PROD-Ordner zeigt. Dann kann `*_REMOTE_PATH` jeweils `.` sein.
 
-## 6. Gemeinsame Änderungen
+## Erstinstallation einer Umgebung
 
-Nach erfolgreichem Login wird derselbe Datensatz `kinderverein-main` verwendet. Änderungen an Aufgaben, Meilensteinen, Abstimmungen, Teamdaten, Dokumenten oder Projektfeed werden zentral gespeichert und über Supabase Realtime an andere angemeldete Browser übertragen.
+Nach dem ersten Upload einer Umgebung einmal deren `api/setup.php` öffnen. Dort werden die Datenbankdaten dieser Umgebung und das erste Admin-Konto eingerichtet.
 
-## 7. Sicherheitsmodell dieser Version
+Die Setup-Seite erzeugt die benötigten Tabellen und schreibt `api/private/config.php` nur auf den jeweiligen STRATO-Webspace. Diese Datei wird bei späteren GitHub-Deployments ausdrücklich ausgespart.
 
-Alle eingeladenen und angemeldeten Teamkonten können den Projektstand lesen und bearbeiten. Nicht angemeldete Nutzer können die Supabase-Daten weder lesen noch verändern.
+Für LAB und PROD muss `setup.php` jeweils mit der passenden, getrennten Datenbank durchgeführt werden.
 
-Die sichtbaren Projektrollen wie „Projektleitung“, „Vorstand“ oder „Beteiligt“ sind derzeit organisatorische Rollen. Falls später unterschiedliche technische Rechte benötigt werden – z. B. nur Admins dürfen Meilensteine löschen, normale Mitglieder dürfen nur abstimmen – sollte die JSON-Gesamtdatenstruktur in getrennte Tabellen mit rollenbezogenen RLS-Regeln aufgeteilt werden.
+## Empfohlener Arbeitsablauf
 
-## 8. DNS / Domain
+1. Änderungen werden im GitHub-Repository erstellt.
+2. GitHub baut und veröffentlicht automatisch ins LAB, sobald die LAB-Secrets eingerichtet sind.
+3. Funktion auf der LAB-Seite mit Testdaten prüfen.
+4. Wenn die Version freigegeben ist, wird die erfolgreiche LAB-Commit-SHA als Produktionsquelle festgelegt.
+5. GitHub baut genau diese geprüfte Version für PROD und veröffentlicht sie dort.
 
-Die App kann auf einer eigenen Subdomain wie `projekt.example.de` betrieben werden. Für Magic Links muss exakt die produktive HTTPS-Adresse in Supabase Auth als Site URL bzw. Redirect URL hinterlegt sein.
+Damit kann die Veröffentlichung künftig aus dem Chat angestoßen werden: Für LAB wird der LAB-Trigger aktualisiert. Für PROD wird zuerst der letzte erfolgreiche LAB-Stand ermittelt und anschließend genau dessen Commit-SHA in `.deploy/production-source.txt` eingetragen.
+
+## Wichtige Sicherheitsregeln
+
+- `api/private/config.php` niemals in GitHub hochladen.
+- Datenbank- und SFTP-Passwörter niemals im Chat oder Repository posten.
+- LAB und PROD verwenden getrennte Datenbanken.
+- PROD nur nach erfolgreichem LAB-Test veröffentlichen.
+- Solange die Seite nur über HTTP erreichbar ist, keine sensiblen Kinder-, Personal- oder Vertragsdaten in der Anwendung speichern. Vor echtem Team-/Produktivbetrieb sollte HTTPS eingerichtet werden.
+
+## Build-Metadaten
+
+Jeder LAB- und PROD-Build enthält eine Datei `deployment-info.json` mit Umgebung, Git-Commit und Build-Zeitpunkt. Damit lässt sich später eindeutig nachvollziehen, welche Quellcode-Version tatsächlich auf STRATO liegt.
