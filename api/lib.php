@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 const CONFIG_FILE = __DIR__ . '/private/config.php';
 const AUTH_COOKIE = 'kinderverein_auth';
-const AUTH_LIFETIME = 43200; // 12 Stunden
+const AUTH_LIFETIME = 43200;
+const UPLOAD_DIR = __DIR__ . '/private/uploads';
 
 function is_https(): bool {
     return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
@@ -25,9 +26,7 @@ function start_secure_session(): void {
 }
 
 function app_config(): array {
-    if (!is_file(CONFIG_FILE)) {
-        throw new RuntimeException('SETUP_REQUIRED');
-    }
+    if (!is_file(CONFIG_FILE)) throw new RuntimeException('SETUP_REQUIRED');
     $config = require CONFIG_FILE;
     if (!is_array($config)) throw new RuntimeException('INVALID_CONFIG');
     return $config;
@@ -67,6 +66,29 @@ function ensure_auth_sessions_table(): void {
     $ready = true;
 }
 
+function ensure_project_files_table(): void {
+    static $ready = false;
+    if ($ready) return;
+    db()->exec("CREATE TABLE IF NOT EXISTS project_files (
+        id CHAR(36) NOT NULL PRIMARY KEY,
+        storage_name VARCHAR(120) NOT NULL UNIQUE,
+        original_name VARCHAR(255) NOT NULL,
+        mime VARCHAR(160) NOT NULL,
+        size_bytes BIGINT UNSIGNED NOT NULL,
+        uploaded_by BIGINT UNSIGNED NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        INDEX idx_project_files_user (uploaded_by),
+        INDEX idx_project_files_active (active)
+    ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0750, true) && !is_dir(UPLOAD_DIR)) {
+        throw new RuntimeException('UPLOAD_DIR_FAILED');
+    }
+    $denyFile = UPLOAD_DIR . '/.htaccess';
+    if (!is_file($denyFile)) @file_put_contents($denyFile, "Require all denied\nDeny from all\n");
+    $ready = true;
+}
+
 function auth_cookie_options(int $expires): array {
     return [
         'expires' => $expires,
@@ -96,9 +118,7 @@ function clear_auth_token(): void {
         try {
             ensure_auth_sessions_table();
             db()->prepare('DELETE FROM auth_sessions WHERE token_hash = ?')->execute([hash('sha256', $token)]);
-        } catch (Throwable) {
-            // Logout soll auch funktionieren, wenn die DB kurz nicht erreichbar ist.
-        }
+        } catch (Throwable) {}
     }
     setcookie(AUTH_COOKIE, '', auth_cookie_options(time() - 3600));
     unset($_COOKIE[AUTH_COOKIE]);
@@ -140,9 +160,7 @@ function session_user(): ?array {
                 return $user;
             }
             clear_auth_token();
-        } catch (Throwable) {
-            // Danach noch den bisherigen PHP-Session-Fallback versuchen.
-        }
+        } catch (Throwable) {}
     }
 
     start_secure_session();
@@ -172,6 +190,13 @@ function require_admin(): array {
     $user = require_user();
     if (($user['role'] ?? '') !== 'admin') json_response(['ok' => false, 'message' => 'Keine Berechtigung.'], 403);
     return $user;
+}
+
+function uuid_v4(): string {
+    $data = random_bytes(16);
+    $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+    $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
 }
 
 function csrf_token(): string {
