@@ -30,11 +30,12 @@ export function resetLocalState() {
 }
 
 async function request(action, options = {}) {
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(`${apiUrl}?action=${encodeURIComponent(action)}`, {
     credentials: 'same-origin',
     headers: {
       Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(!isForm && options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers || {}),
     },
     cache: 'no-store',
@@ -117,7 +118,6 @@ export function subscribeCloudState(callback) {
   if (!cloudEnabled) return () => {}
   let stopped = false
   let busy = false
-
   const poll = async () => {
     if (stopped || busy) return
     busy = true
@@ -134,10 +134,48 @@ export function subscribeCloudState(callback) {
       busy = false
     }
   }
-
   const timer = window.setInterval(poll, 4000)
   return () => {
     stopped = true
     window.clearInterval(timer)
   }
+}
+
+export async function listUserAccounts() {
+  if (!cloudEnabled) return []
+  const payload = await request('users')
+  return payload.users || []
+}
+
+export async function createUserAccount(input) {
+  if (!cloudEnabled) throw new Error('Benutzerkonten können nur im STRATO-LAB verwaltet werden.')
+  const payload = await request('users', { method: 'POST', body: JSON.stringify(input) })
+  return payload.user
+}
+
+export async function updateUserAccount(id, changes) {
+  if (!cloudEnabled) throw new Error('Benutzerkonten können nur im STRATO-LAB verwaltet werden.')
+  const payload = await request('users', { method: 'PATCH', body: JSON.stringify({ id, ...changes }) })
+  return payload.user
+}
+
+export async function uploadProjectFile(file) {
+  if (!cloudEnabled) {
+    return { id: `local-${Date.now()}`, name: file.name, size: file.size, mime: file.type || 'application/octet-stream', uploadedAt: new Date().toISOString(), uploadedBy: 'Demo' }
+  }
+  const form = new FormData()
+  form.append('file', file)
+  const payload = await request('file-upload', { method: 'POST', body: form })
+  return payload.file
+}
+
+export function fileDownloadUrl(id) {
+  if (!cloudEnabled) return '#'
+  return `${apiUrl}?action=file-download&id=${encodeURIComponent(id)}`
+}
+
+export async function deleteProjectFile(id) {
+  if (!cloudEnabled) return true
+  await request('file-delete', { method: 'POST', body: JSON.stringify({ id }) })
+  return true
 }
