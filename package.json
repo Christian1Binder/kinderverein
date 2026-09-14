@@ -1,17 +1,20 @@
 {
   "name": "kinderverein-projektzentrale",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "prepare:source": "node scripts/restore-source.mjs",
-    "build": "npm run prepare:source && vite build",
-    "build:pages": "npm run prepare:source && vite build --base=/kinderverein/ --outDir dist",
+    "build": "vite build",
+    "build:pages": "vite build --base=/kinderverein/ --outDir dist",
     "build:strato": "node scripts/build-strato.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tiptap/extension-placeholder": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
