@@ -7,8 +7,18 @@ const apiUrl = import.meta.env.VITE_API_URL || './api/index.php'
 export const cloudEnabled = backendMode === 'php'
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
-let authListener = null
+const authListeners = new Set()
 let lastRemoteStamp = null
+
+function emitAuth(session) {
+  authListeners.forEach((listener) => {
+    try { listener(session) } catch (error) { console.error(error) }
+  })
+}
+
+function apiBase() {
+  return apiUrl.replace(/index\.php(?:\?.*)?$/, '')
+}
 
 export function loadLocalState() {
   try {
@@ -69,10 +79,8 @@ export async function getSession() {
 }
 
 export function onAuthChange(callback) {
-  authListener = callback
-  return () => {
-    if (authListener === callback) authListener = null
-  }
+  authListeners.add(callback)
+  return () => authListeners.delete(callback)
 }
 
 export async function signInWithEmail(email, password = '') {
@@ -83,14 +91,35 @@ export async function signInWithEmail(email, password = '') {
     body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
   })
   const session = payload.session || null
-  authListener?.(session)
+  emitAuth(session)
+  return session
+}
+
+export async function registerSelf({ name, email, password, privacyAccepted }) {
+  if (!cloudEnabled) throw new Error('Die Registrierung ist nur im STRATO-LAB verfügbar.')
+  const response = await fetch(`${apiBase()}register.php`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password, privacyAccepted }),
+  })
+  let payload = null
+  try { payload = await response.json() } catch { throw new Error('Die Registrierung konnte nicht verarbeitet werden.') }
+  if (!response.ok || payload?.ok === false) {
+    const error = new Error(payload?.message || `Registrierung fehlgeschlagen (${response.status})`)
+    error.status = response.status
+    throw error
+  }
+  const session = payload.session || null
+  emitAuth(session)
   return session
 }
 
 export async function signOut() {
   if (!cloudEnabled) return
   await request('logout', { method: 'POST', body: JSON.stringify({}) })
-  authListener?.(null)
+  emitAuth(null)
 }
 
 export async function loadCloudState() {
@@ -128,7 +157,7 @@ export function subscribeCloudState(callback) {
         if (payload.data) callback(payload.data)
       }
     } catch (error) {
-      if (error.status === 401) authListener?.(null)
+      if (error.status === 401) emitAuth(null)
       else console.error('Synchronisierung fehlgeschlagen', error)
     } finally {
       busy = false
@@ -176,8 +205,7 @@ export function fileDownloadUrl(id) {
 
 export function projectImageUrl(id) {
   if (!cloudEnabled || !id) return '#'
-  const base = apiUrl.replace(/index\.php(?:\?.*)?$/, '')
-  return `${base}image.php?id=${encodeURIComponent(id)}`
+  return `${apiBase()}image.php?id=${encodeURIComponent(id)}`
 }
 
 export async function deleteProjectFile(id) {
