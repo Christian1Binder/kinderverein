@@ -1,11 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import AppV2 from './AppV2.jsx'
+import PortalRoot from './PortalRoot.jsx'
 import './v2.css'
 import './production.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AppV2 />
+    <PortalRoot />
   </React.StrictMode>,
 )
