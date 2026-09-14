@@ -1,4 +1,4 @@
-name: Build and deploy STRATO site
+name: Build STRATO package
 
 on:
   push:
@@ -13,12 +13,6 @@ on:
       - '.github/workflows/build-strato.yml'
   workflow_dispatch:
 
-env:
-  STRATO_HOST: ${{ secrets.STRATO_HOST }}
-  STRATO_USER: ${{ secrets.STRATO_USER }}
-  STRATO_PASSWORD: ${{ secrets.STRATO_PASSWORD }}
-  STRATO_REMOTE_PATH: ${{ secrets.STRATO_REMOTE_PATH }}
-
 jobs:
   build-strato:
     runs-on: ubuntu-latest
@@ -29,13 +23,19 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm install
 
       - name: Build STRATO package
+        env:
+          VITE_APP_ENV: package
         run: npm run build:strato
+
+      - name: Add build metadata
+        run: |
+          printf '{"environment":"package","source_sha":"%s","built_at":"%s"}\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist-strato/deployment-info.json
 
       - name: Upload STRATO build artifact
         uses: actions/upload-artifact@v4
@@ -43,13 +43,3 @@ jobs:
           name: kinderverein-strato
           path: dist-strato/
           if-no-files-found: error
-
-      - name: Install SFTP client
-        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
-        run: sudo apt-get update && sudo apt-get install -y lftp
-
-      - name: Deploy to STRATO via SFTP
-        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
-        run: |
-          TARGET="${STRATO_REMOTE_PATH:-.}"
-          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob api/private/config.php dist-strato/ $TARGET; bye"
