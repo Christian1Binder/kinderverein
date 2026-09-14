@@ -1,0 +1,83 @@
+name: Integrate admin backend
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-admin-backend.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch application
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/AppV2.jsx')
+          s = path.read_text()
+
+          def rep(old, new, label):
+              global s
+              if old not in s:
+                  raise SystemExit(f'Missing pattern: {label}')
+              s = s.replace(old, new, 1)
+
+          rep("import PollsWithImages from './PollsWithImages.jsx'", "import PollsWithImages from './PollsWithImages.jsx'\nimport AdminBackend from './AdminBackend.jsx'", 'admin import')
+
+          old = """function canEditDocument(project, user, doc) {\n  const kind = memberKind(project, user)\n  if (user?.role === 'viewer') return false\n  return user?.role === 'admin' || kind === 'founder' || doc.createdByEmail === user?.email\n}\n"""
+          new = """const DEFAULT_ACCESS = {\n  founder: { documents_edit: true, documents_finalize: true, files_manage: true, tasks_manage: true, polls_create: true, calendar_manage: true, decisions_manage: true, cms_manage: false },\n  member: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },\n  viewer: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },\n}\n\nfunction hasPermission(project, user, key) {\n  if (!user) return false\n  if (user.role === 'admin') return true\n  if (user.role === 'viewer') return false\n  const profile = getProfile(project, user)\n  if (profile?.permissions && Object.prototype.hasOwnProperty.call(profile.permissions, key)) return Boolean(profile.permissions[key])\n  return Boolean((DEFAULT_ACCESS[profile?.kind || 'member'] || DEFAULT_ACCESS.member)[key])\n}\n\nfunction canEditDocument(project, user, doc) {\n  if (user?.role === 'viewer') return false\n  return hasPermission(project, user, 'documents_edit') || doc.createdByEmail === user?.email\n}\n"""
+          rep(old, new, 'permission helpers')
+
+          rep("{user.role === 'admin' && <button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><SlidersHorizontal size={18} /><span>Studio</span></button>}", "{(user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><Shield size={18} /><span>Admin</span></button>}", 'admin nav')
+
+          rep("{page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} />}", "{page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate={hasPermission(project, user, 'polls_create')} />}", 'poll permission')
+          rep("{page === 'studio' && user.role === 'admin' && <Studio project={project} mutate={mutate} />}", "{page === 'studio' && (user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} />}", 'admin render')
+
+          rep("function Tasks({ project, user, mutate }) {\n  const [newTitle, setNewTitle] = useState('')", "function Tasks({ project, user, mutate }) {\n  const canManage = hasPermission(project, user, 'tasks_manage')\n  const [newTitle, setNewTitle] = useState('')", 'tasks permission const')
+          rep("action={<form className=\"quick-add\" onSubmit={add}><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder=\"Neue Aufgabe …\" /><button className=\"primary-btn\"><Plus size={16} /> Anlegen</button></form>}", "action={canManage ? <form className=\"quick-add\" onSubmit={add}><input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder=\"Neue Aufgabe …\" /><button className=\"primary-btn\"><Plus size={16} /> Anlegen</button></form> : null}", 'tasks action')
+          rep("<TaskCard key={task.id} task={task} mutate={mutate} user={user} />", "<TaskCard key={task.id} task={task} mutate={mutate} user={user} canManage={canManage} />", 'task card prop')
+          rep("function TaskCard({ task, mutate, user }) {", "function TaskCard({ task, mutate, user, canManage }) {", 'task card signature')
+          rep("<div className=\"task-top\"><PriorityBadge value={task.priority} /><button className=\"icon-btn mini\" onClick={() => mutate((p) => { p.tasks = p.tasks.filter((t) => t.id !== task.id) }, `Aufgabe „${task.title}“ entfernt`)}><Trash2 size={14} /></button></div>", "<div className=\"task-top\"><PriorityBadge value={task.priority} />{canManage && <button className=\"icon-btn mini\" onClick={() => mutate((p) => { p.tasks = p.tasks.filter((t) => t.id !== task.id) }, `Aufgabe „${task.title}“ entfernt`)}><Trash2 size={14} /></button>}</div>", 'task delete')
+          rep("<div className=\"task-foot\"><button onClick={() => mutate((p) => { p.tasks.find((t) => t.id === task.id).status = nextStatus }, `Status von „${task.title}“ geändert`)}>{task.status === 'done' ? 'Wieder öffnen' : 'Weiter'} <ChevronRight size={14} /></button><span>", "<div className=\"task-foot\">{canManage && <button onClick={() => mutate((p) => { p.tasks.find((t) => t.id === task.id).status = nextStatus }, `Status von „${task.title}“ geändert`)}>{task.status === 'done' ? 'Wieder öffnen' : 'Weiter'} <ChevronRight size={14} /></button>}<span>", 'task status')
+
+          rep("function DocumentEditor({ doc, user, project, mutate }) {\n  const canEdit = canEditDocument(project, user, doc)", "function DocumentEditor({ doc, user, project, mutate }) {\n  const canEdit = canEditDocument(project, user, doc)\n  const canFinalize = hasPermission(project, user, 'documents_finalize')", 'document finalize const')
+          rep("if (!canEdit || finalizing) return", "if (!canFinalize || finalizing) return", 'finalize guard')
+          rep("{canEdit && <button className=\"secondary-btn\" disabled={finalizing} onClick={finalizeToFiles}", "{canFinalize && <button className=\"secondary-btn\" disabled={finalizing} onClick={finalizeToFiles}", 'finalize button')
+
+          rep("function Files({ project, user, mutate, setToast }) {\n  const [folderId", "function Files({ project, user, mutate, setToast }) {\n  const canManage = hasPermission(project, user, 'files_manage')\n  const [folderId", 'files permission const')
+          rep("action={<div className=\"header-actions\"><button className=\"secondary-btn\" onClick={addFolder}><Plus size={16} /> Ordner</button><label className={`primary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> {busy ? 'Lädt …' : 'Hochladen'}<input ref={inputRef} hidden type=\"file\" onChange={(e) => upload(e.target.files?.[0])} /></label></div>}", "action={canManage ? <div className=\"header-actions\"><button className=\"secondary-btn\" onClick={addFolder}><Plus size={16} /> Ordner</button><label className={`primary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> {busy ? 'Lädt …' : 'Hochladen'}<input ref={inputRef} hidden type=\"file\" onChange={(e) => upload(e.target.files?.[0])} /></label></div> : null}", 'files action')
+
+          rep("function Calendar({ project, user, mutate }) {\n  const [showNew", "function Calendar({ project, user, mutate }) {\n  const canManage = hasPermission(project, user, 'calendar_manage')\n  const [showNew", 'calendar permission const')
+          rep("<button className=\"primary-btn\" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Termin</button>", "{canManage && <button className=\"primary-btn\" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Termin</button>}", 'calendar action')
+
+          rep("function Decisions({ project, user, mutate }) {\n  const [showNew", "function Decisions({ project, user, mutate }) {\n  const canManage = hasPermission(project, user, 'decisions_manage')\n  const [showNew", 'decision permission const')
+          rep("action={<button className=\"primary-btn\" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Entscheidung</button>}", "action={canManage ? <button className=\"primary-btn\" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Entscheidung</button> : null}", 'decision action')
+
+          s = s.replace("['Studio & Module', 'Unter „Studio“ stellst du das Dashboard für den Gründungskreis zusammen.']", "['Admin-Backend', 'Unter „Admin“ verwaltest du Zugänge, Sonderrechte und das gemeinsame Dashboard.']")
+          path.write_text(s)
+
+          poll = Path('src/PollsWithImages.jsx')
+          p = poll.read_text()
+          old = "export default function PollsWithImages({ project, user, mutate, setToast }) {"
+          if old not in p: raise SystemExit('Missing poll signature')
+          p = p.replace(old, "export default function PollsWithImages({ project, user, mutate, setToast, canCreate = true }) {", 1)
+          old = "<button className=\"primary-btn\" onClick={() => setShowNew((value) => !value)}><Plus size={16} /> Umfrage</button>"
+          if old not in p: raise SystemExit('Missing poll create button')
+          p = p.replace(old, "{canCreate && <button className=\"primary-btn\" onClick={() => setShowNew((value) => !value)}><Plus size={16} /> Umfrage</button>}", 1)
+          p = p.replace("{showNew && <form", "{canCreate && showNew && <form", 1)
+          poll.write_text(p)
+          PY
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/AppV2.jsx src/PollsWithImages.jsx
+          git commit -m "Integrate admin backend and granular permissions"
+          git push
