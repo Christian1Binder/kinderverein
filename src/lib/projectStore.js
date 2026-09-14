@@ -174,6 +174,12 @@ export function fileDownloadUrl(id) {
   return `${apiUrl}?action=file-download&id=${encodeURIComponent(id)}`
 }
 
+export function projectImageUrl(id) {
+  if (!cloudEnabled || !id) return '#'
+  const base = apiUrl.replace(/index\.php(?:\?.*)?$/, '')
+  return `${base}image.php?id=${encodeURIComponent(id)}`
+}
+
 export async function deleteProjectFile(id) {
   if (!cloudEnabled) return true
   await request('file-delete', { method: 'POST', body: JSON.stringify({ id }) })
