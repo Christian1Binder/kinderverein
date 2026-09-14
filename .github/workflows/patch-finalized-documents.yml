@@ -1,0 +1,53 @@
+name: Finalized documents to files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-finalized-documents.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add finalize and file action
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/AppV2.jsx')
+          text = path.read_text()
+
+          old = """function downloadEditableDocument(title, html) {\n  const filename = `${safeFile(title || 'dokument')}.doc`\n  const body = `<!doctype html><html><head><meta charset=\"utf-8\"><title>${title || 'Dokument'}</title><style>body{font-family:Arial,sans-serif;line-height:1.6;margin:40px}h1,h2,h3{margin-top:1.4em}</style></head><body>${html || '<p></p>'}</body></html>`\n  const blob = new Blob(['\\ufeff', body], { type: 'application/msword;charset=utf-8' })\n  const url = URL.createObjectURL(blob)\n  const a = document.createElement('a')\n  a.href = url\n  a.download = filename\n  a.click()\n  URL.revokeObjectURL(url)\n}\n"""
+          new = """function editableDocumentFile(title, html) {\n  const filename = `${safeFile(title || 'dokument')}.doc`\n  const body = `<!doctype html><html><head><meta charset=\"utf-8\"><title>${title || 'Dokument'}</title><style>body{font-family:Arial,sans-serif;line-height:1.6;margin:40px}h1,h2,h3{margin-top:1.4em}</style></head><body>${html || '<p></p>'}</body></html>`\n  return new File(['\\ufeff', body], filename, { type: 'application/msword;charset=utf-8' })\n}\n\nfunction downloadEditableDocument(title, html) {\n  const file = editableDocumentFile(title, html)\n  const url = URL.createObjectURL(file)\n  const a = document.createElement('a')\n  a.href = url\n  a.download = file.name\n  a.click()\n  URL.revokeObjectURL(url)\n}\n\nfunction finalDocumentFolder(project, doc) {\n  const haystack = `${doc.category || ''} ${doc.title || ''}`.toLowerCase()\n  if (haystack.includes('satzung') || haystack.includes('recht')) return project.folders.find((f) => f.id === 'folder-satzung')?.id\n  if (haystack.includes('finanz') || haystack.includes('steuer')) return project.folders.find((f) => f.id === 'folder-finanzamt')?.id\n  return project.folders.find((f) => f.id === 'folder-gruendung')?.id || project.folders[0]?.id || ''\n}\n"""
+          if old not in text:
+              raise SystemExit('downloadEditableDocument block not found')
+          text = text.replace(old, new, 1)
+
+          old = """function DocumentEditor({ doc, user, project, mutate }) {\n  const canEdit = canEditDocument(project, user, doc)\n  const [title, setTitle] = useState(doc.title)\n  const [comment, setComment] = useState('')\n  const [historyOpen, setHistoryOpen] = useState(false)\n"""
+          new = """function DocumentEditor({ doc, user, project, mutate }) {\n  const canEdit = canEditDocument(project, user, doc)\n  const [title, setTitle] = useState(doc.title)\n  const [comment, setComment] = useState('')\n  const [historyOpen, setHistoryOpen] = useState(false)\n  const [finalizing, setFinalizing] = useState(false)\n"""
+          if old not in text:
+              raise SystemExit('DocumentEditor header not found')
+          text = text.replace(old, new, 1)
+
+          old = """  const download = () => downloadEditableDocument(title || doc.title, editor?.getHTML() || doc.content || '')\n\n  return <section className=\"editor-shell\"><div className=\"editor-top\"><div><input className=\"document-title\" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className=\"editor-actions\"><button className=\"secondary-btn\" onClick={download}><Download size={16} /> Download</button><button className=\"secondary-btn\" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className=\"primary-btn\" onClick={save}><Save size={16} /> Speichern</button>}</div></div>\n"""
+          new = """  const download = () => downloadEditableDocument(title || doc.title, editor?.getHTML() || doc.content || '')\n\n  const finalizeToFiles = async () => {\n    if (!canEdit || finalizing) return\n    const finalTitle = title.trim() || doc.title || 'Dokument'\n    const html = editor?.getHTML() || doc.content || ''\n    if (!window.confirm(`„${finalTitle}“ finalisieren und als feste Datei unter „Dateien“ ablegen? Das Arbeitsdokument bleibt erhalten.`)) return\n    setFinalizing(true)\n    try {\n      const file = editableDocumentFile(`${finalTitle} – final`, html)\n      const meta = await uploadProjectFile(file)\n      const folderId = finalDocumentFolder(project, { ...doc, title: finalTitle })\n      mutate((p) => {\n        const target = p.documents.find((d) => d.id === doc.id)\n        if (target) {\n          if (target.content !== html || target.title !== finalTitle) target.versions.unshift({ id: uid('v'), content: target.content || '', title: target.title, author: user.name || user.email, email: user.email, createdAt: nowIso() })\n          target.content = html\n          target.title = finalTitle\n          target.status = 'final'\n          target.finalizedAt = nowIso()\n          target.finalizedBy = user.name || user.email\n          target.updatedAt = nowIso()\n          target.updatedBy = user.name || user.email\n        }\n        p.files.unshift({ ...meta, folderId, source: 'finalized-document', sourceDocumentId: doc.id, finalizedAt: nowIso(), finalizedBy: user.name || user.email })\n      }, `Dokument „${finalTitle}“ finalisiert und unter Dateien abgelegt`)\n    } catch (error) {\n      window.alert(error.message || 'Finalisierung fehlgeschlagen.')\n    } finally {\n      setFinalizing(false)\n    }\n  }\n\n  return <section className=\"editor-shell\"><div className=\"editor-top\"><div><input className=\"document-title\" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{doc.status === 'final' ? `Finalisiert${doc.finalizedBy ? ` · von ${doc.finalizedBy}` : ''}` : canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className=\"editor-actions\"><button className=\"secondary-btn\" onClick={download}><Download size={16} /> Download</button><button className=\"secondary-btn\" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className=\"secondary-btn\" disabled={finalizing} onClick={finalizeToFiles}><Folder size={16} /> {finalizing ? 'Wird abgelegt …' : 'Finalisieren & ablegen'}</button>}{canEdit && <button className=\"primary-btn\" onClick={save}><Save size={16} /> Speichern</button>}</div></div>\n"""
+          if old not in text:
+              raise SystemExit('DocumentEditor action block not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/AppV2.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Allow finalized documents to be filed as files"
+          git push
