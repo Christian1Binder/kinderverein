@@ -15,6 +15,7 @@ import {
   saveLocalState, signInWithEmail, signOut, subscribeCloudState, updateUserAccount,
   uploadProjectFile,
 } from './lib/projectStore.js'
+import PollsWithImages from './PollsWithImages.jsx'
 
 const NAV = [
   ['dashboard', 'Übersicht', LayoutDashboard],
@@ -265,7 +266,7 @@ function AppV2() {
           {page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
           {page === 'documents' && <Documents project={project} user={user} mutate={mutate} />}
           {page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
-          {page === 'polls' && <Polls project={project} user={user} mutate={mutate} />}
+          {page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'calendar' && <Calendar project={project} user={user} mutate={mutate} />}
           {page === 'members' && <Members project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'decisions' && <Decisions project={project} user={user} mutate={mutate} />}
