@@ -92,6 +92,7 @@ function memberKind(project, user) {
 
 function canEditDocument(project, user, doc) {
   const kind = memberKind(project, user)
+  if (user?.role === 'viewer') return false
   return user?.role === 'admin' || kind === 'founder' || doc.createdByEmail === user?.email
 }
 
@@ -252,7 +253,7 @@ function AppV2() {
             <Search size={18} />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Dokumente, Aufgaben, Dateien durchsuchen …" />
             {search && <button className="search-clear" onClick={() => setSearch('')}><X size={16} /></button>}
-            {search && <SearchPalette results={searchResults} onSelect={(result) => { go(result.page); if (result.docId) sessionStorage.setItem('wekib-open-doc', result.docId) }} />}
+            {search && <SearchPalette results={searchResults} onSelect={(result) => { go(result.page); if (result.docId) sessionStorage.setItem('wekib-open-doc', result.docId); if (result.fileId) sessionStorage.setItem('wekib-open-file', result.fileId) }} />}
           </div>
           <div className="top-actions">
             <div className="env-badge">LAB</div>
@@ -264,7 +265,7 @@ function AppV2() {
         <div className="content-frame">
           {page === 'dashboard' && <Dashboard project={project} user={user} mutate={mutate} go={go} />}
           {page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
-          {page === 'documents' && <Documents project={project} user={user} mutate={mutate} />}
+          {page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} />}
           {page === 'calendar' && <Calendar project={project} user={user} mutate={mutate} />}
@@ -352,20 +353,81 @@ function TaskCard({ task, mutate, user }) {
   return <article className="task-card"><div className="task-top"><PriorityBadge value={task.priority} /><button className="icon-btn mini" onClick={() => mutate((p) => { p.tasks = p.tasks.filter((t) => t.id !== task.id) }, `Aufgabe „${task.title}“ entfernt`)}><Trash2 size={14} /></button></div><h4>{task.title}</h4><p>{task.owner || 'Nicht zugewiesen'} {task.due ? `· ${fmtDate(task.due)}` : ''}</p><div className="task-foot"><button onClick={() => mutate((p) => { p.tasks.find((t) => t.id === task.id).status = nextStatus }, `Status von „${task.title}“ geändert`)}>{task.status === 'done' ? 'Wieder öffnen' : 'Weiter'} <ChevronRight size={14} /></button><span><MessageSquare size={14} /> {task.comments?.length || 0}</span></div><details className="comments"><summary>Kommentare</summary><div className="comment-list">{(task.comments || []).map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span></div>)}</div><form onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.tasks.find((t) => t.id === task.id).comments.push({ id: uid('c'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${task.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar …" /></form></details></article>
 }
 
-function Documents({ project, user, mutate }) {
-  const remembered = sessionStorage.getItem('wekib-open-doc')
-  const [selectedId, setSelectedId] = useState(remembered || project.documents[0]?.id || null)
+function Documents({ project, user, mutate, setToast }) {
+  const rememberedDoc = sessionStorage.getItem('wekib-open-doc')
+  const rememberedFile = sessionStorage.getItem('wekib-open-file')
+  const firstKey = rememberedDoc ? `doc:${rememberedDoc}` : rememberedFile ? `file:${rememberedFile}` : project.documents[0]?.id ? `doc:${project.documents[0].id}` : project.files[0]?.id ? `file:${project.files[0].id}` : null
+  const [selectedKey, setSelectedKey] = useState(firstKey)
   const [filter, setFilter] = useState('')
-  const selected = project.documents.find((d) => d.id === selectedId) || project.documents[0]
-  useEffect(() => { if (remembered) sessionStorage.removeItem('wekib-open-doc') }, [])
+  const [busy, setBusy] = useState(false)
+  const uploadRef = useRef(null)
+
+  useEffect(() => {
+    if (rememberedDoc) sessionStorage.removeItem('wekib-open-doc')
+    if (rememberedFile) sessionStorage.removeItem('wekib-open-file')
+  }, [])
+
+  const entries = [
+    ...project.documents.map((doc) => ({
+      key: `doc:${doc.id}`,
+      kind: 'document',
+      item: doc,
+      title: doc.title,
+      subtitle: `${doc.category || 'Arbeitsdokument'} · ${statusLabel(doc.status)}`,
+      search: `${doc.title} ${doc.category} ${stripHtml(doc.content)}`.toLowerCase(),
+    })),
+    ...project.files.map((file) => ({
+      key: `file:${file.id}`,
+      kind: 'file',
+      item: file,
+      title: file.name,
+      subtitle: `Upload · ${formatBytes(file.size)}`,
+      search: `${file.name} ${file.mime || ''}`.toLowerCase(),
+    })),
+  ]
+  const visible = entries.filter((entry) => entry.search.includes(filter.trim().toLowerCase()))
+  const selected = entries.find((entry) => entry.key === selectedKey) || entries[0] || null
+
   const createDoc = () => {
+    if (user.role === 'viewer') return
     const doc = { id: uid('doc'), title: 'Neues Dokument', category: 'Eigene Dokumente', status: 'in_progress', owner: user.name || user.email, content: '<p></p>', versions: [], comments: [], createdByEmail: user.email, createdByName: user.name || user.email, createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user.name || user.email }
-    mutate((p) => p.documents.unshift(doc), 'Neues Dokument angelegt'); setSelectedId(doc.id)
+    mutate((p) => p.documents.unshift(doc), 'Neues Dokument angelegt')
+    setSelectedKey(`doc:${doc.id}`)
   }
-  const visible = project.documents.filter((d) => `${d.title} ${d.category} ${stripHtml(d.content)}`.toLowerCase().includes(filter.toLowerCase()))
-  return <div className="page documents-page"><PageHeader eyebrow="GEMEINSAMER ARBEITSRAUM" title="Dokumente" description="Entwürfe, Versionen und Kommentare bis zur finalen Gründungsfassung." action={<button className="primary-btn" onClick={createDoc}><Plus size={16} /> Dokument</button>} />
-    <div className="documents-layout"><aside className="doc-list"><div className="inline-search"><Search size={15} /><input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Dokumente durchsuchen" /></div>{visible.map((doc) => <button key={doc.id} className={`doc-list-item ${selected?.id === doc.id ? 'active' : ''}`} onClick={() => setSelectedId(doc.id)}><FileText size={17} /><div><strong>{doc.title}</strong><span>{doc.category} · {statusLabel(doc.status)}</span></div></button>)}</aside>{selected ? <DocumentEditor key={selected.id} doc={selected} user={user} project={project} mutate={mutate} /> : <EmptyState text="Noch keine Dokumente vorhanden." />}</div>
+
+  const upload = async (file) => {
+    if (!file || user.role === 'viewer') return
+    setBusy(true)
+    try {
+      const meta = await uploadProjectFile(file)
+      const folderId = project.folders.find((folder) => folder.id === 'folder-gruendung')?.id || project.folders[0]?.id || ''
+      mutate((p) => p.files.unshift({ ...meta, folderId, source: 'documents' }), `Dokument „${file.name}“ hochgeladen`)
+      setSelectedKey(`file:${meta.id}`)
+      setToast?.('Dokument hochgeladen')
+    } catch (error) {
+      setToast?.(error.message || 'Upload fehlgeschlagen')
+    } finally {
+      setBusy(false)
+      if (uploadRef.current) uploadRef.current.value = ''
+    }
+  }
+
+  return <div className="page documents-page"><PageHeader eyebrow="ZENTRALER DOKUMENTENRAUM" title="Dokumente" description="Erstellte Arbeitsdokumente und hochgeladene Dateien gemeinsam an einem Ort – mit Up- und Download." action={<div className="header-actions">{user.role !== 'viewer' && <label className={`secondary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> {busy ? 'Lädt …' : 'Hochladen'}<input ref={uploadRef} hidden type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.rtf" onChange={(e) => upload(e.target.files?.[0])} /></label>}{user.role !== 'viewer' && <button className="primary-btn" onClick={createDoc}><Plus size={16} /> Dokument erstellen</button>}</div>} />
+    <div className="documents-summary"><span><strong>{project.documents.length}</strong> erstellte Dokumente</span><span><strong>{project.files.length}</strong> Uploads</span><span><strong>{entries.length}</strong> insgesamt</span></div>
+    <div className="documents-layout"><aside className="doc-list"><div className="inline-search"><Search size={15} /><input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Dokumente & Uploads durchsuchen" /></div>{visible.length ? visible.map((entry) => <button key={entry.key} className={`doc-list-item ${selected?.key === entry.key ? 'active' : ''}`} onClick={() => setSelectedKey(entry.key)}>{entry.kind === 'document' ? <FileText size={17} /> : <Upload size={17} />}<div><strong>{entry.title}</strong><span>{entry.subtitle}</span></div></button>) : <EmptyState compact text="Keine passenden Dokumente gefunden." />}</aside>{selected?.kind === 'document' ? <DocumentEditor key={selected.item.id} doc={selected.item} user={user} project={project} mutate={mutate} /> : selected?.kind === 'file' ? <UploadedDocumentPanel key={selected.item.id} file={selected.item} user={user} mutate={mutate} setToast={setToast} setSelectedKey={setSelectedKey} /> : <EmptyState text="Noch keine Dokumente vorhanden." />}</div>
   </div>
+}
+
+function downloadEditableDocument(title, html) {
+  const filename = `${safeFile(title || 'dokument')}.doc`
+  const body = `<!doctype html><html><head><meta charset="utf-8"><title>${title || 'Dokument'}</title><style>body{font-family:Arial,sans-serif;line-height:1.6;margin:40px}h1,h2,h3{margin-top:1.4em}</style></head><body>${html || '<p></p>'}</body></html>`
+  const blob = new Blob(['\ufeff', body], { type: 'application/msword;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function DocumentEditor({ doc, user, project, mutate }) {
@@ -398,12 +460,30 @@ function DocumentEditor({ doc, user, project, mutate }) {
     setTitle(version.title || doc.title)
   }
 
-  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
+  const download = () => downloadEditableDocument(title || doc.title, editor?.getHTML() || doc.content || '')
+
+  return <section className="editor-shell"><div className="editor-top"><div><input className="document-title" value={title} disabled={!canEdit} onChange={(e) => setTitle(e.target.value)} /><span>{canEdit ? `Bearbeitbar · zuletzt ${doc.updatedBy || 'noch nicht gespeichert'}` : 'Nur Lesen'}</span></div><div className="editor-actions"><button className="secondary-btn" onClick={download}><Download size={16} /> Download</button><button className="secondary-btn" onClick={() => setHistoryOpen(!historyOpen)}><History size={16} /> Versionen</button>{canEdit && <button className="primary-btn" onClick={save}><Save size={16} /> Speichern</button>}</div></div>
     <div className="editor-toolbar"><button disabled={!canEdit} className={editor?.isActive('bold') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleBold().run()}><Bold size={16} /></button><button disabled={!canEdit} className={editor?.isActive('italic') ? 'active' : ''} onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().toggleBulletList().run()}><List size={16} /></button><span /><button disabled={!canEdit} onClick={() => editor?.chain().focus().undo().run()}><Undo2 size={16} /></button><button disabled={!canEdit} onClick={() => editor?.chain().focus().redo().run()}><Redo2 size={16} /></button></div>
     <EditorContent editor={editor} className="rich-editor" />
-    <div className="editor-meta"><div><MessageSquare size={16} /><strong>Kommentare</strong></div><div className="comment-list">{doc.comments.map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span><small>{fmtDateTime(c.createdAt)}</small></div>)}</div><form className="comment-form" onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.documents.find((d) => d.id === doc.id).comments.push({ id: uid('dc'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${doc.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar oder Hinweis ergänzen …" /><button className="secondary-btn">Senden</button></form></div>
+    <div className="editor-meta"><div><MessageSquare size={16} /><strong>Kommentare</strong></div><div className="comment-list">{doc.comments.map((c) => <div key={c.id}><strong>{c.author}</strong><span>{c.text}</span><small>{fmtDateTime(c.createdAt)}</small></div>)}</div>{canEdit && <form className="comment-form" onSubmit={(e) => { e.preventDefault(); if (!comment.trim()) return; mutate((p) => p.documents.find((d) => d.id === doc.id).comments.push({ id: uid('dc'), author: user.name || user.email, email: user.email, text: comment.trim(), createdAt: nowIso() }), `Kommentar zu „${doc.title}“ hinzugefügt`); setComment('') }}><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kommentar oder Hinweis ergänzen …" /><button className="secondary-btn">Senden</button></form>}</div>
     {historyOpen && <aside className="history-panel"><div className="history-head"><strong>Versionshistorie</strong><button className="icon-btn" onClick={() => setHistoryOpen(false)}><X size={17} /></button></div>{doc.versions.length ? doc.versions.map((v, i) => <button className="version-row" key={v.id} onClick={() => restore(v)}><span>Version {doc.versions.length - i}</span><strong>{v.author}</strong><small>{fmtDateTime(v.createdAt)}</small></button>) : <EmptyState compact text="Noch keine ältere Version." />}</aside>}
     </section>
+}
+
+function UploadedDocumentPanel({ file, user, mutate, setToast, setSelectedKey }) {
+  const remove = async () => {
+    if (!window.confirm(`„${file.name}“ wirklich löschen?`)) return
+    try {
+      await deleteProjectFile(file.id)
+      mutate((p) => { p.files = p.files.filter((item) => item.id !== file.id) }, `Dokument „${file.name}“ gelöscht`)
+      setSelectedKey(null)
+      setToast?.('Dokument gelöscht')
+    } catch (error) {
+      setToast?.(error.message || 'Dokument konnte nicht gelöscht werden.')
+    }
+  }
+
+  return <section className="editor-shell uploaded-document-panel"><div className="editor-top"><div><strong className="uploaded-document-title">{file.name}</strong><span>Hochgeladen {file.uploadedAt ? `· ${fmtDateTime(file.uploadedAt)}` : ''}</span></div><div className="editor-actions"><a className="primary-btn" href={fileDownloadUrl(file.id)}><Download size={16} /> Herunterladen</a>{user.role !== 'viewer' && <button className="secondary-btn" onClick={remove}><Trash2 size={16} /> Löschen</button>}</div></div><div className="uploaded-document-body"><div className="uploaded-document-icon"><FileText size={34} /></div><div><p className="eyebrow">HOCHGELADENE DATEI</p><h2>{file.name}</h2><p>{formatBytes(file.size)}{file.mime ? ` · ${file.mime}` : ''}{file.uploadedBy ? ` · von ${file.uploadedBy}` : ''}</p><a className="primary-btn" href={fileDownloadUrl(file.id)}><Download size={16} /> Originaldatei herunterladen</a></div></div></section>
 }
 
 function Files({ project, user, mutate, setToast }) {
@@ -540,7 +620,7 @@ function buildSearchResults(project, query) {
   const out = []
   project.documents.forEach((d) => { if (`${d.title} ${d.category} ${stripHtml(d.content)}`.toLowerCase().includes(q)) out.push({ type: 'Dokument', id: d.id, title: d.title, subtitle: d.category, page: 'documents', docId: d.id }) })
   project.tasks.forEach((t) => { if (`${t.title} ${t.owner}`.toLowerCase().includes(q)) out.push({ type: 'Aufgabe', id: t.id, title: t.title, subtitle: t.owner, page: 'tasks' }) })
-  project.files.forEach((f) => { if (f.name?.toLowerCase().includes(q)) out.push({ type: 'Datei', id: f.id, title: f.name, subtitle: project.folders.find((x) => x.id === f.folderId)?.name || '', page: 'files' }) })
+  project.files.forEach((f) => { if (f.name?.toLowerCase().includes(q)) out.push({ type: 'Datei', id: f.id, title: f.name, subtitle: project.folders.find((x) => x.id === f.folderId)?.name || 'Upload', page: 'documents', fileId: f.id }) })
   project.decisions.forEach((d) => { if (`${d.title} ${d.decision}`.toLowerCase().includes(q)) out.push({ type: 'Entscheidung', id: d.id, title: d.title, subtitle: d.decision.slice(0, 80), page: 'decisions' }) })
   project.profiles.forEach((p) => { if (`${p.displayName} ${p.area}`.toLowerCase().includes(q)) out.push({ type: 'Mitglied', id: p.email, title: p.displayName || p.email, subtitle: p.area, page: 'members' }) })
   return out

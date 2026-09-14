@@ -2,3 +2,7 @@
 .auth-card > .btn--ghost.btn--full {
   display: none;
 }
+
+
+/* Dokumentenraum: Arbeitsdokumente + Uploads */
+.documents-summary{display:flex;gap:8px;flex-wrap:wrap;margin:-10px 0 14px}.documents-summary span{display:inline-flex;gap:5px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font-size:9px;color:var(--muted)}.documents-summary strong{font-size:11px;color:var(--text)}.uploaded-document-title{font-size:17px;letter-spacing:-.02em}.uploaded-document-body{min-height:390px;display:flex;align-items:center;justify-content:center;gap:22px;padding:42px;text-align:left}.uploaded-document-body>div:last-child{max-width:540px}.uploaded-document-body h2{font-size:25px;letter-spacing:-.035em;margin:7px 0}.uploaded-document-body p:not(.eyebrow){color:var(--muted);font-size:11px;line-height:1.6;margin:0 0 20px}.uploaded-document-icon{width:76px;height:76px;border-radius:12px;background:var(--purple-soft);color:var(--purple);display:grid;place-items:center;flex:none}.secondary-btn.disabled{opacity:.55;pointer-events:none}@media(max-width:600px){.documents-summary{margin-top:-4px}.uploaded-document-body{min-height:300px;padding:30px 20px;align-items:flex-start;flex-direction:column}.uploaded-document-body h2{font-size:21px}.documents-page .page-header .header-actions{grid-template-columns:1fr 1fr}.documents-page .editor-actions{display:grid;grid-template-columns:1fr 1fr}.documents-page .editor-actions .primary-btn:last-child{grid-column:1/-1}}
