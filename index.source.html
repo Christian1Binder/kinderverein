@@ -6,8 +6,25 @@
     <meta name="theme-color" content="#15132b" />
     <meta name="description" content="Projektzentrale zur Gründung eines gemeinnützigen Bildungsträgers in Bayern." />
     <title>Kinderverein · Projektzentrale</title>
+    <style>
+      body[data-app-env="lab"]::before {
+        content: "LAB · TESTUMGEBUNG";
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        z-index: 2147483647;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #17152e;
+        color: #fff;
+        font: 700 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: .08em;
+        box-shadow: 0 4px 18px rgba(0,0,0,.18);
+        pointer-events: none;
+      }
+    </style>
   </head>
-  <body>
+  <body data-app-env="%VITE_APP_ENV%">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
