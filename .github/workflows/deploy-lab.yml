@@ -1,0 +1,66 @@
+name: Deploy LAB to STRATO
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'api/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'vite.config.js'
+      - 'index.source.html'
+      - '.deploy/lab-trigger.txt'
+      - '.github/workflows/deploy-lab.yml'
+  workflow_dispatch:
+
+env:
+  STRATO_HOST: ${{ secrets.STRATO_LAB_HOST }}
+  STRATO_USER: ${{ secrets.STRATO_LAB_USER }}
+  STRATO_PASSWORD: ${{ secrets.STRATO_LAB_PASSWORD }}
+  STRATO_REMOTE_PATH: ${{ secrets.STRATO_LAB_REMOTE_PATH }}
+
+jobs:
+  deploy-lab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build LAB package
+        env:
+          VITE_APP_ENV: lab
+        run: npm run build:strato
+
+      - name: Add deployment metadata
+        run: |
+          printf '{"environment":"lab","source_sha":"%s","built_at":"%s"}\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist-strato/deployment-info.json
+
+      - name: Upload LAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinderverein-strato-lab-${{ github.sha }}
+          path: dist-strato/
+          if-no-files-found: error
+
+      - name: Install SFTP client
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy LAB to STRATO
+        if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
+        run: |
+          TARGET="${STRATO_REMOTE_PATH:-.}"
+          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob api/private/config.php dist-strato/ $TARGET; bye"
+
+      - name: LAB connection not configured
+        if: ${{ env.STRATO_HOST == '' || env.STRATO_USER == '' || env.STRATO_PASSWORD == '' }}
+        run: echo "LAB build created. Add STRATO_LAB_* repository secrets to enable automatic deployment."
