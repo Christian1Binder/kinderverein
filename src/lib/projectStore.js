@@ -20,6 +20,10 @@ function apiBase() {
   return apiUrl.replace(/index\.php(?:\?.*)?$/, '')
 }
 
+export function accountUrl(page) {
+  return `${apiBase()}${page}`
+}
+
 export function loadLocalState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -62,6 +66,7 @@ async function request(action, options = {}) {
   if (!response.ok || payload?.ok === false) {
     const error = new Error(payload?.message || `Serverfehler (${response.status})`)
     error.status = response.status
+    error.code = payload?.code
     throw error
   }
   return payload
@@ -111,9 +116,7 @@ export async function registerSelf({ name, email, password, privacyAccepted }) {
     error.status = response.status
     throw error
   }
-  const session = payload.session || null
-  emitAuth(session)
-  return session
+  return payload
 }
 
 export async function signOut() {
