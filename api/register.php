@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/lib.php';
+require __DIR__ . '/account.php';
 
 header('Referrer-Policy: same-origin');
 header('X-Frame-Options: DENY');
@@ -50,9 +51,10 @@ if (!$privacyAccepted) {
 }
 
 try {
+    ensure_account_security_schema();
     $hash = password_hash($password, PASSWORD_DEFAULT);
     db()->beginTransaction();
-    db()->prepare('INSERT INTO users (email, name, password_hash, role, active, updated_at) VALUES (?, ?, ?, ?, 1, NOW())')
+    db()->prepare('INSERT INTO users (email, name, password_hash, role, active, email_verified_at, updated_at) VALUES (?, ?, ?, ?, 1, NULL, NOW())')
         ->execute([$email, $name, $hash, 'member']);
     $id = (int)db()->lastInsertId();
 
@@ -89,17 +91,25 @@ try {
     }
     db()->commit();
 
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = $id;
-    $_SESSION['register_attempts'] = 0;
-    issue_auth_token($id);
+    try {
+        send_verification_mail($id, $email, $name);
+    } catch (Throwable $mailError) {
+        error_log('WeKiB verification mail failed: ' . $mailError->getMessage());
+        json_response([
+            'ok' => true,
+            'verificationRequired' => true,
+            'mailSent' => false,
+            'message' => 'Dein Konto wurde angelegt. Die Bestätigungs-E-Mail konnte noch nicht versendet werden. Bitte versuche den Versand später erneut.',
+        ], 201);
+    }
 
-    json_response(['ok' => true, 'session' => ['user' => [
-        'id' => $id,
-        'email' => $email,
-        'name' => $name,
-        'role' => 'member',
-    ]]], 201);
+    $_SESSION['register_attempts'] = 0;
+    json_response([
+        'ok' => true,
+        'verificationRequired' => true,
+        'mailSent' => true,
+        'message' => 'Konto angelegt. Bitte bestätige jetzt deine E-Mail-Adresse über den Link in deinem Postfach.',
+    ], 201);
 } catch (PDOException $e) {
     if (db()->inTransaction()) db()->rollBack();
     if ((string)$e->getCode() === '23000') {
