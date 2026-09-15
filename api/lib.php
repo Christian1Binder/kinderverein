@@ -101,6 +101,30 @@ function auth_cookie_options(int $expires): array {
 
 function issue_auth_token(int $userId): void {
     ensure_auth_sessions_table();
+
+    // Sobald die E-Mail-Verifikation installiert ist, dürfen unbestätigte Selbstregistrierungen keine Sitzung erhalten.
+    try {
+        $column = db()->query("SHOW COLUMNS FROM users LIKE 'email_verified_at'")->fetch();
+        if ($column) {
+            $stmt = db()->prepare('SELECT email_verified_at FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch();
+            if ($row && empty($row['email_verified_at'])) {
+                start_secure_session();
+                unset($_SESSION['user_id']);
+                setcookie(AUTH_COOKIE, '', auth_cookie_options(time() - 3600));
+                unset($_COOKIE[AUTH_COOKIE]);
+                json_response([
+                    'ok' => false,
+                    'code' => 'EMAIL_NOT_VERIFIED',
+                    'message' => 'Bitte bestätige zuerst deine E-Mail-Adresse. Du kannst dir den Bestätigungslink erneut zusenden lassen.',
+                ], 403);
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('WeKiB verification gate failed: ' . $e->getMessage());
+    }
+
     db()->exec('DELETE FROM auth_sessions WHERE expires_at <= NOW()');
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
