@@ -21,6 +21,15 @@ try {
         ], 503);
     }
 
+    if ($action === 'public-content' && $method === 'GET') {
+        $stmt = db()->prepare('SELECT data FROM project_state WHERE id = ? LIMIT 1');
+        $stmt->execute(['kinderverein-main']);
+        $row = $stmt->fetch();
+        $state = $row && is_string($row['data'] ?? null) ? json_decode((string)$row['data'], true) : [];
+        $blocks = is_array($state['settings']['publicBlocks'] ?? null) ? $state['settings']['publicBlocks'] : null;
+        json_response(['ok' => true, 'blocks' => $blocks]);
+    }
+
     if ($action === 'session' && $method === 'GET') {
         $user = session_user();
         json_response([
@@ -185,7 +194,13 @@ try {
         $user = require_user();
         if (($user['role'] ?? '') === 'viewer') json_response(['ok' => false, 'message' => 'Dieser Zugang hat keine Upload-Berechtigung.'], 403);
         $portalAccess = portal_access_for_user($user);
-        if (!$portalAccess['foundation'] && !$portalAccess['board'] && !$portalAccess['admin']) json_response(['ok' => false, 'message' => 'Keine Berechtigung für die interne Dateiablage.'], 403);
+        $scope = trim((string)($_POST['scope'] ?? 'foundation'));
+        $allowedUpload = ($user['role'] ?? '') === 'admin'
+            || ($scope === 'treasury' && $portalAccess['board'] && portal_permission_for_user($user, 'finance_manage'))
+            || (in_array($scope, ['public-cms','member-cms'], true) && portal_permission_for_user($user, 'cms_manage'))
+            || ($scope === 'board' && $portalAccess['board'] && portal_permission_for_user($user, 'files_manage'))
+            || ($scope === 'foundation' && $portalAccess['foundation'] && portal_permission_for_user($user, 'files_manage'));
+        if (!$allowedUpload) json_response(['ok' => false, 'message' => 'Keine Upload-Berechtigung für diesen Bereich.'], 403);
         if (!isset($_FILES['file']) || !is_array($_FILES['file'])) json_response(['ok' => false, 'message' => 'Keine Datei empfangen.'], 400);
         $file = $_FILES['file'];
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) json_response(['ok' => false, 'message' => 'Upload fehlgeschlagen.'], 400);
@@ -208,15 +223,14 @@ try {
         }
         db()->prepare('INSERT INTO project_files (id, storage_name, original_name, mime, size_bytes, uploaded_by, active) VALUES (?, ?, ?, ?, ?, ?, 1)')
             ->execute([$id, $storage, $original, $mime, $size, (int)$user['id']]);
-        json_response(['ok' => true, 'file' => ['id' => $id, 'name' => $original, 'size' => $size, 'mime' => $mime, 'uploadedAt' => gmdate('c'), 'uploadedBy' => $user['name']]], 201);
+        json_response(['ok' => true, 'file' => ['id' => $id, 'name' => $original, 'size' => $size, 'mime' => $mime, 'uploadedAt' => gmdate('c'), 'uploadedBy' => $user['name'], 'scope' => $scope]], 201);
     }
 
     if ($action === 'file-download' && $method === 'GET') {
         $user = require_user();
-        $portalAccess = portal_access_for_user($user);
-        if (!$portalAccess['foundation'] && !$portalAccess['board'] && !$portalAccess['admin']) { http_response_code(403); exit('Keine Berechtigung.'); }
-        ensure_project_files_table();
         $id = (string)($_GET['id'] ?? '');
+        if (!portal_can_access_file($user, $id)) { http_response_code(403); exit('Keine Berechtigung.'); }
+        ensure_project_files_table();
         $stmt = db()->prepare('SELECT storage_name, original_name, mime, size_bytes FROM project_files WHERE id = ? AND active = 1 LIMIT 1');
         $stmt->execute([$id]);
         $row = $stmt->fetch();
@@ -236,6 +250,7 @@ try {
         ensure_project_files_table();
         $input = json_input();
         $id = (string)($input['id'] ?? '');
+        if (($user['role'] ?? '') !== 'admin' && !portal_can_access_file($user, $id)) json_response(['ok' => false, 'message' => 'Keine Berechtigung zum Löschen dieser Datei.'], 403);
         $stmt = db()->prepare('SELECT storage_name, uploaded_by FROM project_files WHERE id = ? AND active = 1 LIMIT 1');
         $stmt->execute([$id]);
         $row = $stmt->fetch();

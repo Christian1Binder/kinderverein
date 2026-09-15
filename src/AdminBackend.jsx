@@ -5,10 +5,12 @@ import {
 } from 'lucide-react'
 import { cloudEnabled, createUserAccount, listUserAccounts, updateUserAccount } from './lib/projectStore.js'
 import './admin.css'
+import PortalCms from './PortalCms.jsx'
 
 export const PERMISSIONS = [
   ['access_foundation', 'Bereich Gründung', 'Öffnet den internen Arbeitsraum für Gründungsmitglieder.'],
   ['access_board', 'Bereich Vorstand', 'Öffnet den vertraulichen Vorstandsbereich.'],
+  ['finance_manage', 'Schatzmeister / Finanzen', 'Darf den geschützten Finanzbereich, Buchungen, Budgets und Finanzdateien verwalten.'],
   ['documents_edit', 'Gemeinsame Dokumente bearbeiten', 'Darf gemeinsame Arbeitsdokumente verändern und Versionen speichern.'],
   ['documents_finalize', 'Dokumente finalisieren', 'Darf Arbeitsfassungen abschließen und in der Dateiablage archivieren.'],
   ['files_manage', 'Dateien & Ordner verwalten', 'Darf Dateien hochladen und Ordner für die gemeinsame Ablage anlegen.'],
@@ -79,7 +81,7 @@ export default function AdminBackend({ project, user, mutate, setToast, initialT
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(false)
   const [showNew, setShowNew] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'member', kind: 'founder' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'member', kind: 'member' })
   const [expanded, setExpanded] = useState(null)
 
   const refresh = async () => {
@@ -109,7 +111,7 @@ export default function AdminBackend({ project, user, mutate, setToast, initialT
         }
       }, `Benutzerzugang für ${form.name.trim()} angelegt`)
       setAccounts((current) => [account, ...current])
-      setForm({ name: '', email: '', password: '', role: 'member', kind: 'founder' })
+      setForm({ name: '', email: '', password: '', role: 'member', kind: 'member' })
       setShowNew(false)
       setToast?.('Benutzerzugang angelegt')
     } catch (error) { setToast?.(error.message) }
@@ -214,7 +216,7 @@ export default function AdminBackend({ project, user, mutate, setToast, initialT
       </section>
     </>}
 
-    {tab === 'cms' && canCms && <CmsPanel project={project} mutate={mutate} />}
+    {tab === 'cms' && canCms && <><PortalCms project={project} mutate={mutate} setToast={setToast} /><div style={{height:24}}/><CmsPanel project={project} mutate={mutate} /></>}
   </div>
 }
 

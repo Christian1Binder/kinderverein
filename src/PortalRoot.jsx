@@ -4,7 +4,8 @@ import {
   LockKeyhole, Menu, Moon, ShieldCheck, Sparkles, Sun, UserPlus, Users, X,
 } from 'lucide-react'
 import AppV2 from './AppV2.jsx'
-import { accountUrl, cloudEnabled, getSession, onAuthChange, registerSelf, signInWithEmail } from './lib/projectStore.js'
+import { PortalBlocks, DEFAULT_PUBLIC_BLOCKS } from './PortalBlocks.jsx'
+import { accountUrl, cloudEnabled, getSession, loadPublicContent, onAuthChange, registerSelf, signInWithEmail } from './lib/projectStore.js'
 import './portal.css'
 
 export default function PortalRoot() {
@@ -41,6 +42,11 @@ function PublicPortal({ onAuthenticated }) {
   const [message, setMessage] = useState('')
   const [login, setLogin] = useState({ email: '', password: '' })
   const [register, setRegister] = useState({ name: '', email: '', password: '', password2: '', privacyAccepted: false })
+  const [publicBlocks, setPublicBlocks] = useState(DEFAULT_PUBLIC_BLOCKS)
+
+  useEffect(() => {
+    loadPublicContent().then((blocks) => { if (Array.isArray(blocks) && blocks.length) setPublicBlocks(blocks) }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -113,51 +119,7 @@ function PublicPortal({ onAuthenticated }) {
       </div>
     </header>
 
-    <main>
-      <section className="public-hero" id="start">
-        <div className="hero-noise" />
-        <div className="public-hero-copy">
-          <span className="public-kicker"><Sparkles size={15} /> WEKIB · IN GRÜNDUNG</span>
-          <h1>Gute Betreuung<br />schafft <em>Freiraum.</em></h1>
-          <p>Wir bauen einen gemeinnützigen Bildungsträger auf, der Kinder und Jugendliche verlässlich begleitet, Entwicklung ermöglicht und Schule mit starken Betreuungsangeboten ergänzt.</p>
-          <div className="public-hero-actions"><a className="portal-primary big" href="#ueber-uns">WeKiB kennenlernen <ChevronRight size={18} /></a><button className="portal-secondary big" onClick={() => openAuth('login')}>Zum Portal</button></div>
-          <div className="public-trust"><span><CheckCircle2 size={15} /> gemeinnützig ausgerichtet</span><span><CheckCircle2 size={15} /> pädagogisch professionell</span><span><CheckCircle2 size={15} /> offen für mehrere Standorte</span></div>
-        </div>
-        <div className="public-hero-visual">
-          <div className="hero-card hero-card-main"><span>UNSER ANSPRUCH</span><strong>Betreuung, die Kinder stärkt.</strong><p>Verlässlich im Alltag. Offen für Entwicklung. Professionell organisiert.</p></div>
-          <div className="hero-card hero-card-small one"><GraduationCap size={21} /><span>Bildung</span></div>
-          <div className="hero-card hero-card-small two"><Users size={21} /><span>Gemeinschaft</span></div>
-          <div className="hero-orbit" />
-        </div>
-      </section>
-
-      <section className="public-section public-intro" id="ueber-uns">
-        <div className="section-label">01 · ÜBER UNS</div>
-        <div className="section-copy"><h2>Ein Träger, der Betreuung<br />als Bildungsraum versteht.</h2><p>WeKiB entsteht aus der Praxis heraus. Unser Ziel ist ein professioneller, verlässlicher und moderner Träger für schulische Betreuung, Ganztagsangebote, Ferienangebote und weitere Bildungs- und Jugendhilfeformate.</p></div>
-      </section>
-
-      <section className="public-section" id="angebote">
-        <div className="section-label">02 · WAS WIR AUFBAUEN</div>
-        <div className="public-offer-grid">
-          <Offer icon={Building2} number="01" title="Ganztag & Betreuung" text="Offene Ganztagsangebote, Mittags- und Nachmittagsbetreuung mit klaren pädagogischen Strukturen." />
-          <Offer icon={BookOpen} number="02" title="Bildung & Entwicklung" text="Angebote, die Selbstständigkeit, Gemeinschaft, Beteiligung und individuelle Entwicklung fördern." />
-          <Offer icon={Sparkles} number="03" title="Ferien & Projekte" text="Ferienbetreuung, Workshops und ergänzende Bildungsangebote für Kinder und Jugendliche." />
-        </div>
-      </section>
-
-      <section className="public-section public-foundation" id="gruendung">
-        <div className="foundation-copy"><span className="public-kicker">TRANSPARENT AUFGEBAUT</span><h2>Von der Gründung<br />zum professionellen Träger.</h2><p>Die rechtliche und organisatorische Gründung von WeKiB wird strukturiert vorbereitet. Gründungsmitglieder arbeiten im geschützten Portal gemeinsam an Satzung, Aufgaben, Dokumenten, Abstimmungen und Terminen.</p><button className="portal-secondary light" onClick={() => openAuth('login')}><LockKeyhole size={16} /> Geschützten Bereich öffnen</button></div>
-        <div className="portal-levels">
-          <Level depth="01" title="Öffentlich" text="Informationen für alle Besucher" active />
-          <Level depth="02" title="Mein WeKiB" text="Persönliches Konto & Profil" />
-          <Level depth="03" title="Gründung" text="Arbeitsraum für Gründungsmitglieder" />
-          <Level depth="04" title="Vorstand" text="Vertrauliche Vorstandsbereiche" />
-          <Level depth="05" title="CMS & Admin" text="Inhalte, Benutzer und Berechtigungen" />
-        </div>
-      </section>
-
-      <section className="public-section public-cta" id="kontakt"><div><span className="public-kicker">MITGESTALTEN</span><h2>Ein Konto ist der Einstieg ins WeKiB-Portal.</h2><p>Registrierte Nutzer starten mit einem persönlichen Basiszugang. Weitere Bereiche werden gezielt durch Administratoren freigeschaltet.</p></div><button className="portal-primary big" onClick={() => openAuth('register')}><UserPlus size={18} /> Kostenlos registrieren</button></section>
-    </main>
+    <main><PortalBlocks blocks={publicBlocks} mode="public" onAction={openAuth} /></main>
 
     <footer className="public-footer"><div className="public-brand"><span>W</span><div><strong>WeKiB</strong><small>Verein in Gründung</small></div></div><p>Bildung · Betreuung · Gemeinschaft</p><button onClick={() => openAuth('login')}>Portal</button></footer>
 

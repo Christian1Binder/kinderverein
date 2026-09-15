@@ -191,12 +191,13 @@ export async function updateUserAccount(id, changes) {
   return payload.user
 }
 
-export async function uploadProjectFile(file) {
+export async function uploadProjectFile(file, scope = 'foundation') {
   if (!cloudEnabled) {
     return { id: `local-${Date.now()}`, name: file.name, size: file.size, mime: file.type || 'application/octet-stream', uploadedAt: new Date().toISOString(), uploadedBy: 'Demo' }
   }
   const form = new FormData()
   form.append('file', file)
+  form.append('scope', scope)
   const payload = await request('file-upload', { method: 'POST', body: form })
   return payload.file
 }
@@ -204,6 +205,17 @@ export async function uploadProjectFile(file) {
 export function fileDownloadUrl(id) {
   if (!cloudEnabled) return '#'
   return `${apiUrl}?action=file-download&id=${encodeURIComponent(id)}`
+}
+
+export async function loadPublicContent() {
+  if (!cloudEnabled) return null
+  const payload = await request('public-content')
+  return payload.blocks || null
+}
+
+export function publicImageUrl(id) {
+  if (!cloudEnabled || !id) return '#'
+  return `${apiBase()}public-image.php?id=${encodeURIComponent(id)}`
 }
 
 export function projectImageUrl(id) {

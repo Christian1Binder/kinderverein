@@ -26,6 +26,32 @@ function portal_access_for_state(array $state, array $user): array {
     ];
 }
 
+function portal_permissions_for_state(array $state, array $user): array {
+    $keys = ['access_foundation','access_board','documents_edit','documents_finalize','files_manage','tasks_manage','polls_create','calendar_manage','decisions_manage','cms_manage','finance_manage'];
+    if (($user['role'] ?? '') === 'admin') return array_fill_keys($keys, true);
+    if (($user['role'] ?? '') === 'viewer') return array_fill_keys($keys, false);
+
+    $profile = portal_profile_for_user($state, $user);
+    $kind = (string)($profile['kind'] ?? 'member');
+    $defaults = array_fill_keys($keys, false);
+    if ($kind === 'founder') {
+        foreach (['access_foundation','documents_edit','documents_finalize','files_manage','tasks_manage','polls_create','calendar_manage','decisions_manage'] as $key) $defaults[$key] = true;
+    }
+    $overrides = is_array($profile['permissions'] ?? null) ? $profile['permissions'] : [];
+    foreach ($keys as $key) if (array_key_exists($key, $overrides)) $defaults[$key] = (bool)$overrides[$key];
+    return $defaults;
+}
+
+function portal_permission_for_user(array $user, string $key): bool {
+    if (($user['role'] ?? '') === 'admin') return true;
+    $stmt = db()->prepare('SELECT data FROM project_state WHERE id = ? LIMIT 1');
+    $stmt->execute(['kinderverein-main']);
+    $row = $stmt->fetch();
+    $state = $row && is_string($row['data'] ?? null) ? json_decode((string)$row['data'], true) : [];
+    $permissions = portal_permissions_for_state(is_array($state) ? $state : [], $user);
+    return !empty($permissions[$key]);
+}
+
 function sanitize_profiles_for_user(array $profiles, array $user): array {
     $email = strtolower((string)($user['email'] ?? ''));
     $out = [];
@@ -59,6 +85,9 @@ function filter_project_state_for_user(array $state, array $user): array {
     foreach ($scopedKeys as $key) {
         $state[$key] = filter_scope_items(is_array($state[$key] ?? null) ? $state[$key] : [], $access['foundation'], $access['board']);
     }
+
+    $permissions = portal_permissions_for_state($state, $user);
+    if (!$access['board'] || empty($permissions['finance_manage'])) $state['finance'] = ['transactions'=>[], 'budgets'=>[], 'files'=>[], 'accounts'=>[]];
 
     if (!$access['foundation'] && !$access['board']) {
         $state['folders'] = [];
@@ -121,15 +150,32 @@ function merge_project_state_for_user(array $current, array $incoming, array $us
     }
 
     if ($access['foundation'] || $access['board']) {
-        foreach (['tasks','documents','files','events','decisions','polls','activities','messages','phases','milestones'] as $key) {
-            $current[$key] = merge_scoped_section(
-                is_array($current[$key] ?? null) ? $current[$key] : [],
-                is_array($incoming[$key] ?? null) ? $incoming[$key] : [],
-                $access['board']
-            );
+        $permissions = portal_permissions_for_state($current, $user);
+        $sectionPermission = [
+            'tasks' => 'tasks_manage',
+            'documents' => 'documents_edit',
+            'files' => 'files_manage',
+            'events' => 'calendar_manage',
+            'decisions' => 'decisions_manage',
+        ];
+        foreach ($sectionPermission as $key => $permission) {
+            if (!empty($permissions[$permission])) {
+                $current[$key] = merge_scoped_section(
+                    is_array($current[$key] ?? null) ? $current[$key] : [],
+                    is_array($incoming[$key] ?? null) ? $incoming[$key] : [],
+                    $access['board']
+                );
+            }
         }
-        if (isset($incoming['folders']) && is_array($incoming['folders'])) $current['folders'] = $incoming['folders'];
+        // Abstimmen darf der Gründungsbereich; Erstellen/Verwalten bleibt zusätzlich in der UI eingeschränkt.
+        if ($access['foundation'] && isset($incoming['polls']) && is_array($incoming['polls'])) {
+            $current['polls'] = merge_scoped_section(is_array($current['polls'] ?? null) ? $current['polls'] : [], $incoming['polls'], $access['board']);
+        }
+        if (!empty($permissions['files_manage']) && isset($incoming['folders']) && is_array($incoming['folders'])) $current['folders'] = $incoming['folders'];
     }
+
+    $permissions = portal_permissions_for_state($current, $user);
+    if ($access['board'] && !empty($permissions['finance_manage']) && isset($incoming['finance']) && is_array($incoming['finance'])) $current['finance'] = $incoming['finance'];
 
     if ($access['cms'] && isset($incoming['settings']) && is_array($incoming['settings'])) {
         $current['settings'] = $incoming['settings'];
@@ -143,4 +189,29 @@ function portal_access_for_user(array $user): array {
     $row = $stmt->fetch();
     $state = $row && is_string($row['data'] ?? null) ? json_decode((string)$row['data'], true) : [];
     return portal_access_for_state(is_array($state) ? $state : [], $user);
+}
+
+
+function portal_file_scope(array $state, string $id): string {
+    foreach (($state['files'] ?? []) as $file) {
+        if (is_array($file) && (string)($file['id'] ?? '') === $id) return (string)($file['scope'] ?? 'foundation');
+    }
+    return 'foundation';
+}
+
+function portal_can_access_file(array $user, string $id): bool {
+    if (($user['role'] ?? '') === 'admin') return true;
+    $stmt = db()->prepare('SELECT data FROM project_state WHERE id = ? LIMIT 1');
+    $stmt->execute(['kinderverein-main']);
+    $row = $stmt->fetch();
+    $state = $row && is_string($row['data'] ?? null) ? json_decode((string)$row['data'], true) : [];
+    if (!is_array($state)) $state = [];
+    $scope = portal_file_scope($state, $id);
+    $access = portal_access_for_state($state, $user);
+    $permissions = portal_permissions_for_state($state, $user);
+    if ($scope === 'treasury') return $access['board'] && !empty($permissions['finance_manage']);
+    if ($scope === 'member-cms') return true;
+    if ($scope === 'public-cms') return false;
+    if ($scope === 'board') return $access['board'];
+    return $access['foundation'];
 }
