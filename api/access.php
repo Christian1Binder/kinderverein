@@ -27,7 +27,7 @@ function portal_access_for_state(array $state, array $user): array {
 }
 
 function portal_permissions_for_state(array $state, array $user): array {
-    $keys = ['access_foundation','access_board','documents_edit','documents_finalize','files_manage','tasks_manage','polls_create','calendar_manage','decisions_manage','cms_manage','finance_manage'];
+    $keys = ['access_foundation','access_board','documents_edit','documents_finalize','files_manage','tasks_manage','polls_create','calendar_manage','decisions_manage','cms_manage','finance_manage','finance_manage'];
     if (($user['role'] ?? '') === 'admin') return array_fill_keys($keys, true);
     if (($user['role'] ?? '') === 'viewer') return array_fill_keys($keys, false);
 
@@ -85,6 +85,9 @@ function filter_project_state_for_user(array $state, array $user): array {
     foreach ($scopedKeys as $key) {
         $state[$key] = filter_scope_items(is_array($state[$key] ?? null) ? $state[$key] : [], $access['foundation'], $access['board']);
     }
+
+    $permissions = portal_permissions_for_state($state, $user);
+    if (!$access['board'] || empty($permissions['finance_manage'])) $state['finance'] = ['transactions'=>[], 'budgets'=>[], 'files'=>[], 'accounts'=>[]];
 
     $permissions = portal_permissions_for_state($state, $user);
     if (!$access['board'] || empty($permissions['finance_manage'])) $state['finance'] = ['transactions'=>[], 'budgets'=>[], 'files'=>[], 'accounts'=>[]];

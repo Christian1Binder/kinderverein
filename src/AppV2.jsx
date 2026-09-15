@@ -11,6 +11,15 @@ import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import Link from '@tiptap/extension-link'
+
+
+
+
+
+
+
+
+
 import * as mammoth from 'mammoth'
 import {
   Activity, ArrowDown, ArrowUp, Bell, Bold, CalendarDays, Check, CheckSquare2,
@@ -28,6 +37,7 @@ import {
 import PollsWithImages from './PollsWithImages.jsx'
 import AdminBackend from './AdminBackend.jsx'
 import Treasurer from './Treasurer.jsx'
+import FileExplorer from './FileExplorer.jsx'
 import { PortalBlocks, DEFAULT_MEMBER_BLOCKS } from './PortalBlocks.jsx'
 
 const FOUNDATION_NAV = [
@@ -630,50 +640,7 @@ function UploadedDocumentPanel({ file, user, project, mutate, setToast, setSelec
 }
 
 function Files({ project, user, mutate, setToast }) {
-  const canManage = hasPermission(project, user, 'files_manage')
-  const [folderId, setFolderId] = useState(project.folders[0]?.id || '')
-  const [busy, setBusy] = useState(false)
-  const inputRef = useRef(null)
-  const folderInputRef = useRef(null)
-
-  const uploadMany = async (fileList, fromFolder = false) => {
-    const files = Array.from(fileList || [])
-    if (!files.length || !canManage) return
-    setBusy(true)
-    try {
-      let targetFolderId = folderId
-      let rootName = ''
-      if (fromFolder) {
-        rootName = (files[0]?.webkitRelativePath || '').split('/')[0] || 'Hochgeladener Ordner'
-        const existing = project.folders.find((f) => f.name === rootName)
-        targetFolderId = existing?.id || uid('folder')
-      }
-      const uploaded = []
-      for (const file of files) {
-        const meta = await uploadProjectFile(file)
-        uploaded.push({ ...meta, folderId: targetFolderId, relativePath: file.webkitRelativePath || '' })
-      }
-      mutate((p) => {
-        if (fromFolder && !p.folders.some((f) => f.id === targetFolderId)) p.folders.push({ id: targetFolderId, name: rootName })
-        p.files.unshift(...uploaded)
-      }, fromFolder ? `Ordner „${rootName}“ mit ${uploaded.length} Dateien hochgeladen` : `${uploaded.length} Datei${uploaded.length === 1 ? '' : 'en'} hochgeladen`)
-      if (fromFolder) setFolderId(targetFolderId)
-      setToast(fromFolder ? `Ordner „${rootName}“ hochgeladen` : `${uploaded.length} Datei${uploaded.length === 1 ? '' : 'en'} hochgeladen`)
-    } catch (error) { setToast(error.message) } finally {
-      setBusy(false)
-      if (inputRef.current) inputRef.current.value = ''
-      if (folderInputRef.current) folderInputRef.current.value = ''
-    }
-  }
-  const remove = async (file) => {
-    if (!canManage || !window.confirm(`„${file.name}“ wirklich löschen?`)) return
-    try { await deleteProjectFile(file.id); mutate((p) => { p.files = p.files.filter((f) => f.id !== file.id) }, `Datei „${file.name}“ gelöscht`) } catch (error) { setToast(error.message) }
-  }
-  const addFolder = () => { if (!canManage) return; const name = window.prompt('Name des neuen Ordners'); if (name?.trim()) mutate((p) => p.folders.push({ id: uid('folder'), name: name.trim() }), `Ordner „${name.trim()}“ angelegt`) }
-  const files = project.files.filter((f) => f.folderId === folderId)
-  return <div className="page"><PageHeader eyebrow="GEMEINSAME ABLAGE" title="Dateien" description="Ordnerstruktur für Gründungsunterlagen, Anlagen und externe Dokumente." action={canManage ? <div className="header-actions"><button className="secondary-btn" onClick={addFolder}><Plus size={16} /> Neuer Ordner</button><label className={`secondary-btn ${busy ? 'disabled' : ''}`}><Upload size={16} /> Dateien<input ref={inputRef} hidden type="file" multiple onChange={(e) => uploadMany(e.target.files, false)} /></label><label className={`primary-btn ${busy ? 'disabled' : ''}`}><Folder size={16} /> {busy ? 'Lädt …' : 'Ordner hochladen'}<input ref={folderInputRef} hidden type="file" multiple webkitdirectory="" directory="" onChange={(e) => uploadMany(e.target.files, true)} /></label></div> : null} />
-    <div className="files-layout"><aside className="folder-list">{project.folders.map((folder) => <button className={folder.id === folderId ? 'active' : ''} key={folder.id} onClick={() => setFolderId(folder.id)}><Folder size={17} /><span>{folder.name}</span><b>{project.files.filter((f) => f.folderId === folder.id).length}</b></button>)}</aside><section className="file-browser"><div className="file-head"><strong>{project.folders.find((f) => f.id === folderId)?.name}</strong><span>{files.length} Dateien</span></div>{files.length ? files.map((file) => <div className="file-row" key={file.id}><FileText size={19} /><div><strong>{file.name}</strong><span>{file.relativePath || `${formatBytes(file.size)} · ${file.uploadedBy || 'Team'}`}</span></div><a className="icon-btn" href={fileDownloadUrl(file.id)} title="Herunterladen"><Download size={16} /></a>{canManage && <button className="icon-btn" onClick={() => remove(file)} title="Löschen"><Trash2 size={16} /></button>}</div>) : <EmptyState text="In diesem Ordner liegen noch keine Dateien." />}</section></div>
-  </div>
+  return <FileExplorer project={project} user={user} mutate={mutate} setToast={setToast} hasPermission={hasPermission} />
 }
 
 function Calendar({ project, user, mutate }) {

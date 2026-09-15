@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import {
   ChevronRight, Download, File, FileText, Folder, FolderOpen, FolderPlus,
-  MoreHorizontal, Pencil, Trash2, Upload, X, MoveRight, Search,
+  MoreHorizontal, Pencil, Trash2, Upload, X, MoveRight, Search, Camera,
 } from 'lucide-react'
 import { deleteProjectFile, fileDownloadUrl, uploadProjectFile } from './lib/projectStore.js'
+import DocumentScanner from './DocumentScanner.jsx'
 
 const collator = new Intl.Collator('de', { sensitivity: 'base', numeric: true })
 const uid = (prefix='folder') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
@@ -57,6 +58,7 @@ export default function FileExplorer({ project, user, mutate, setToast, hasPermi
   const [busy,setBusy]=useState(false)
   const [menu,setMenu]=useState(null)
   const [moveTarget,setMoveTarget]=useState(null)
+  const [scannerOpen,setScannerOpen]=useState(false)
   const inputRef=useRef(null)
   const folderInputRef=useRef(null)
   const canManage = hasPermission(project,user,'files_manage')
@@ -154,7 +156,7 @@ export default function FileExplorer({ project, user, mutate, setToast, hasPermi
   ]
 
   return <div className="page file-explorer-page">
-    <div className="page-header"><div><p className="eyebrow">GEMEINSAME ABLAGE</p><h1>Dateien</h1><p>Explorer mit Ordnern, Unterordnern und klarer alphabetischer Sortierung.</p></div>{canManage&&<div className="header-actions"><button className="secondary-btn" onClick={addFolder}><FolderPlus size={16}/> Neuer Ordner</button><label className={`secondary-btn ${busy?'disabled':''}`}><Upload size={16}/> Dateien<input ref={inputRef} hidden multiple type="file" onChange={e=>upload(e.target.files,false)}/></label><label className={`primary-btn ${busy?'disabled':''}`}><FolderOpen size={16}/> Ordner hochladen<input ref={folderInputRef} hidden multiple type="file" webkitdirectory="" directory="" onChange={e=>upload(e.target.files,true)}/></label></div>}</div>
+    <div className="page-header"><div><p className="eyebrow">GEMEINSAME ABLAGE</p><h1>Dateien</h1><p>Explorer mit Ordnern, Unterordnern und klarer alphabetischer Sortierung.</p></div>{canManage&&<div className="header-actions"><button className="secondary-btn" onClick={addFolder}><FolderPlus size={16}/> Neuer Ordner</button><button className="secondary-btn" onClick={()=>setScannerOpen(true)}><Camera size={16}/> Dokument scannen</button><label className={`secondary-btn ${busy?'disabled':''}`}><Upload size={16}/> Dateien<input ref={inputRef} hidden multiple type="file" onChange={e=>upload(e.target.files,false)}/></label><label className={`primary-btn ${busy?'disabled':''}`}><FolderOpen size={16}/> Ordner hochladen<input ref={folderInputRef} hidden multiple type="file" webkitdirectory="" directory="" onChange={e=>upload(e.target.files,true)}/></label></div>}</div>
 
     <div className="explorer-shell">
       <aside className="explorer-tree"><button className={`tree-root ${currentId===null?'active':''}`} onClick={()=>setCurrentId(null)}><FolderOpen size={17}/><span>Dateiablage</span></button><FolderTree folders={folders} currentId={currentId} onOpen={setCurrentId}/></aside>
@@ -165,6 +167,7 @@ export default function FileExplorer({ project, user, mutate, setToast, hasPermi
       </section>
     </div>
     {moveTarget&&<MoveDialog item={moveTarget.item} kind={moveTarget.kind} folders={folders} onClose={()=>setMoveTarget(null)} onMove={(target)=>moveTarget.kind==='folder'?moveFolder(moveTarget.item,target):moveFile(moveTarget.item,target)}/>} 
+    <DocumentScanner open={scannerOpen} onClose={()=>setScannerOpen(false)} folderId={currentId} user={user} mutate={mutate} setToast={setToast} />
   </div>
 }
 
