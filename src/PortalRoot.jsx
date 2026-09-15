@@ -4,7 +4,7 @@ import {
   LockKeyhole, Menu, Moon, ShieldCheck, Sparkles, Sun, UserPlus, Users, X,
 } from 'lucide-react'
 import AppV2 from './AppV2.jsx'
-import { cloudEnabled, getSession, onAuthChange, registerSelf, signInWithEmail } from './lib/projectStore.js'
+import { accountUrl, cloudEnabled, getSession, onAuthChange, registerSelf, signInWithEmail } from './lib/projectStore.js'
 import './portal.css'
 
 export default function PortalRoot() {
@@ -47,6 +47,20 @@ function PublicPortal({ onAuthenticated }) {
     localStorage.setItem('wekib-theme', theme)
   }, [theme])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const verification = params.get('verification')
+    if (!verification) return
+    setAuthOpen(true)
+    setMode('login')
+    setMessage(verification === 'success'
+      ? 'E-Mail-Adresse bestätigt. Du kannst dich jetzt anmelden.'
+      : verification === 'invalid'
+        ? 'Der Bestätigungslink ist ungültig oder abgelaufen. Bitte fordere einen neuen an.'
+        : 'Die E-Mail-Bestätigung konnte nicht abgeschlossen werden.')
+    window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+  }, [])
+
   const openAuth = (nextMode) => {
     setMode(nextMode)
     setMessage('')
@@ -72,8 +86,11 @@ function PublicPortal({ onAuthenticated }) {
     if (register.password !== register.password2) return setMessage('Die beiden Passwörter stimmen nicht überein.')
     setBusy(true)
     try {
-      const session = await registerSelf(register)
-      onAuthenticated(session)
+      const result = await registerSelf(register)
+      setMode('login')
+      setLogin({ email: register.email, password: '' })
+      setRegister({ name: '', email: '', password: '', password2: '', privacyAccepted: false })
+      setMessage(result.message || 'Konto angelegt. Bitte bestätige deine E-Mail-Adresse über den Link in deinem Postfach.')
     } catch (error) {
       setMessage(error.message)
     } finally { setBusy(false) }
@@ -151,6 +168,7 @@ function PublicPortal({ onAuthenticated }) {
       {mode === 'login' ? <form className="portal-auth-form" onSubmit={submitLogin}>
         <label>E-Mail-Adresse<input type="email" required autoComplete="username" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} /></label>
         <label>Passwort<input type="password" required autoComplete="current-password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
+        <div className="portal-account-links"><a href={accountUrl('reset.php')}>Passwort vergessen?</a><a href={accountUrl('resend.php')}>Bestätigungs-Mail erneut senden</a></div>
         <button className="portal-primary full" disabled={busy}>{busy ? 'Anmeldung läuft …' : 'Anmelden'} <ArrowRight size={16} /></button>
       </form> : <form className="portal-auth-form" onSubmit={submitRegister}>
         <label>Name<input required minLength="2" value={register.name} onChange={(e) => setRegister({ ...register, name: e.target.value })} /></label>
