@@ -1,0 +1,25 @@
+name: Apply portal levels migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.deploy/portal-levels-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migration
+        run: python scripts/apply_portal_levels.py
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/index.php src/AppV2.jsx src/AdminBackend.jsx src/v2.css
+          git commit -m "Enforce multi-level portal access" || exit 0
+          git push
