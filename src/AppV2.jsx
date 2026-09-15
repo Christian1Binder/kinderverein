@@ -18,8 +18,7 @@ import {
 import PollsWithImages from './PollsWithImages.jsx'
 import AdminBackend from './AdminBackend.jsx'
 
-const NAV = [
-  ['dashboard', 'Übersicht', LayoutDashboard],
+const FOUNDATION_NAV = [
   ['tasks', 'Aufgaben', CheckSquare2],
   ['documents', 'Dokumente', FileText],
   ['files', 'Dateien', Folder],
@@ -88,13 +87,13 @@ function getProfile(project, user) {
 
 function memberKind(project, user) {
   if (user?.role === 'admin') return 'admin'
-  return getProfile(project, user)?.kind || 'founder'
+  return getProfile(project, user)?.kind || 'member'
 }
 
 const DEFAULT_ACCESS = {
-  founder: { documents_edit: true, documents_finalize: true, files_manage: true, tasks_manage: true, polls_create: true, calendar_manage: true, decisions_manage: true, cms_manage: false },
-  member: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
-  viewer: { documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
+  founder: { access_foundation: true, access_board: false, documents_edit: true, documents_finalize: true, files_manage: true, tasks_manage: true, polls_create: true, calendar_manage: true, decisions_manage: true, cms_manage: false },
+  member: { access_foundation: false, access_board: false, documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
+  viewer: { access_foundation: false, access_board: false, documents_edit: false, documents_finalize: false, files_manage: false, tasks_manage: false, polls_create: false, calendar_manage: false, decisions_manage: false, cms_manage: false },
 }
 
 function hasPermission(project, user, key) {
@@ -229,8 +228,12 @@ function AppV2() {
   const profile = getProfile(project, user)
   const kind = memberKind(project, user)
   const onboardingDone = project.onboarding[user.email]?.done
+  const isAdmin = user.role === 'admin'
+  const canFoundation = isAdmin || kind === 'founder' || hasPermission(project, user, 'access_foundation')
+  const canBoard = isAdmin || hasPermission(project, user, 'access_board')
+  const canCms = isAdmin || hasPermission(project, user, 'cms_manage')
 
-  const searchResults = buildSearchResults(project, search)
+  const searchResults = canFoundation || canBoard ? buildSearchResults(project, search) : []
 
   const go = (target) => {
     setPage(target)
@@ -246,10 +249,13 @@ function AppV2() {
           <div><strong>{project.settings.brandName || 'WeKiB'}</strong><span>Gründungsplattform</span></div>
         </div>
         <nav className="nav-stack">
-          {NAV.map(([id, label, Icon]) => (
+          <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`} onClick={() => go('dashboard')}><LayoutDashboard size={18} /><span>Mein WeKiB</span></button>
+          {canFoundation && <><div className="nav-section-label">GRÜNDUNG</div>{FOUNDATION_NAV.map(([id, label, Icon]) => (
             <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => go(id)}><Icon size={18} /><span>{label}</span></button>
-          ))}
-          {(user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><Shield size={18} /><span>Admin</span></button>}
+          ))}</>}
+          {canBoard && <><div className="nav-section-label">VORSTAND</div><button className={`nav-item ${page === 'board' ? 'active' : ''}`} onClick={() => go('board')}><LockKeyhole size={18} /><span>Vorstandsbereich</span></button></>}
+          {canCms && <><div className="nav-section-label">VERWALTUNG</div><button className={`nav-item ${page === 'studio' ? 'active' : ''}`} onClick={() => go('studio')}><SlidersHorizontal size={18} /><span>CMS</span></button></>}
+          {isAdmin && <button className={`nav-item ${page === 'admin' ? 'active' : ''}`} onClick={() => go('admin')}><Shield size={18} /><span>Administration</span></button>}
         </nav>
         <div className="sidebar-foot">
           <button className={`profile-chip ${page === 'profile' ? 'active' : ''}`} onClick={() => go('profile')}>
@@ -278,16 +284,18 @@ function AppV2() {
         </header>
 
         <div className="content-frame">
-          {page === 'dashboard' && <Dashboard project={project} user={user} mutate={mutate} go={go} />}
-          {page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
-          {page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
-          {page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
-          {page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate={hasPermission(project, user, 'polls_create')} />}
-          {page === 'calendar' && <Calendar project={project} user={user} mutate={mutate} />}
-          {page === 'members' && <Members project={project} user={user} mutate={mutate} setToast={setToast} />}
-          {page === 'decisions' && <Decisions project={project} user={user} mutate={mutate} />}
-          {page === 'activity' && <ActivityPage project={project} />}
-          {page === 'studio' && (user.role === 'admin' || hasPermission(project, user, 'cms_manage')) && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} />}
+          {page === 'dashboard' && (canFoundation ? <Dashboard project={project} user={user} mutate={mutate} go={go} /> : <MemberDashboard user={user} profile={profile} canBoard={canBoard} canCms={canCms} />)}
+          {canFoundation && page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
+          {canFoundation && page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
+          {canFoundation && page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
+          {canFoundation && page === 'polls' && <PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate={hasPermission(project, user, 'polls_create')} />}
+          {canFoundation && page === 'calendar' && <Calendar project={project} user={user} mutate={mutate} />}
+          {canFoundation && page === 'members' && <Members project={project} user={user} mutate={mutate} setToast={setToast} />}
+          {canFoundation && page === 'decisions' && <Decisions project={project} user={user} mutate={mutate} />}
+          {canFoundation && page === 'activity' && <ActivityPage project={project} />}
+          {canBoard && page === 'board' && <BoardArea />}
+          {canCms && page === 'studio' && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} initialTab="cms" />}
+          {isAdmin && page === 'admin' && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} initialTab="users" />}
           {page === 'profile' && <Profile project={project} user={user} mutate={mutate} />}
         </div>
       </main>
@@ -296,6 +304,17 @@ function AppV2() {
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )
+}
+
+function MemberDashboard({ user, profile, canBoard, canCms }) {
+  return <div className="page"><PageHeader eyebrow="MEIN WEKIB" title={`Willkommen, ${firstName(profile?.displayName || user.name || user.email)}`} description="Dein persönlicher Zugang zum WeKiB-Portal. Interne Arbeitsbereiche erscheinen erst nach Freigabe." />
+    <section className="hero-panel"><div><p className="eyebrow">PORTALZUGANG</p><h2>Dein Konto ist aktiv.</h2><p>Du siehst nur die Bereiche, für die dein Konto freigeschaltet wurde. Gründungs- und Vorstandsunterlagen bleiben geschützt.</p></div><div className="hero-phase"><span>DEIN ZUGANG</span><strong>Mein WeKiB</strong><small>{canBoard ? 'Vorstand freigeschaltet' : canCms ? 'CMS freigeschaltet' : 'Basiszugang'}</small></div></section>
+    <section className="metric-grid"><Metric label="Öffentliche Website" value="✓" hint="für alle Besucher" /><Metric label="Mein WeKiB" value="✓" hint="persönlicher Bereich" /><Metric label="Gründung" value="—" hint="nur nach Freigabe" /><Metric label="Vorstand" value={canBoard ? '✓' : '—'} hint="vertraulicher Bereich" /></section>
+  </div>
+}
+
+function BoardArea() {
+  return <div className="page"><PageHeader eyebrow="VERTRAULICH" title="Vorstandsbereich" description="Geschützter Arbeitsraum für Vorstand und ausdrücklich berechtigte Personen." /><section className="card"><div className="studio-intro"><LockKeyhole size={21} /><div><strong>Vorstandsunterlagen getrennt vom Gründungsbereich</strong><span>Hier werden Vorstandsdokumente, Beschlüsse, Finanzen und weitere vertrauliche Unterlagen abgelegt.</span></div></div></section></div>
 }
 
 function LoadingScreen() {

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/lib.php';
+require __DIR__ . '/access.php';
 
 header('Referrer-Policy: same-origin');
 header('X-Frame-Options: DENY');
@@ -88,11 +89,13 @@ try {
     }
 
     if ($action === 'state' && $method === 'GET') {
-        require_user();
+        $user = require_user();
         $stmt = db()->prepare('SELECT data, updated_at FROM project_state WHERE id = ? LIMIT 1');
         $stmt->execute(['kinderverein-main']);
         $row = $stmt->fetch();
-        json_response(['ok' => true, 'data' => $row ? json_decode((string)$row['data'], true) : null, 'updatedAt' => $row['updated_at'] ?? null]);
+        $data = $row ? json_decode((string)$row['data'], true) : null;
+        if (is_array($data)) $data = filter_project_state_for_user($data, $user);
+        json_response(['ok' => true, 'data' => $data, 'updatedAt' => $row['updated_at'] ?? null]);
     }
 
     if ($action === 'state' && $method === 'PUT') {
@@ -101,6 +104,13 @@ try {
         $input = json_input();
         $data = $input['data'] ?? null;
         if (!is_array($data)) json_response(['ok' => false, 'message' => 'Ungültiger Projektstand.'], 400);
+        if (($user['role'] ?? '') !== 'admin') {
+            $stmtCurrent = db()->prepare('SELECT data FROM project_state WHERE id = ? LIMIT 1');
+            $stmtCurrent->execute(['kinderverein-main']);
+            $rowCurrent = $stmtCurrent->fetch();
+            $currentData = $rowCurrent && is_string($rowCurrent['data'] ?? null) ? json_decode((string)$rowCurrent['data'], true) : [];
+            $data = merge_project_state_for_user(is_array($currentData) ? $currentData : [], $data, $user);
+        }
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json === false || strlen($json) > 3_500_000) json_response(['ok' => false, 'message' => 'Projektstand ist zu groß.'], 413);
         $stamp = gmdate('Y-m-d H:i:s.u');
@@ -174,6 +184,8 @@ try {
     if ($action === 'file-upload' && $method === 'POST') {
         $user = require_user();
         if (($user['role'] ?? '') === 'viewer') json_response(['ok' => false, 'message' => 'Dieser Zugang hat keine Upload-Berechtigung.'], 403);
+        $portalAccess = portal_access_for_user($user);
+        if (!$portalAccess['foundation'] && !$portalAccess['board'] && !$portalAccess['admin']) json_response(['ok' => false, 'message' => 'Keine Berechtigung für die interne Dateiablage.'], 403);
         if (!isset($_FILES['file']) || !is_array($_FILES['file'])) json_response(['ok' => false, 'message' => 'Keine Datei empfangen.'], 400);
         $file = $_FILES['file'];
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) json_response(['ok' => false, 'message' => 'Upload fehlgeschlagen.'], 400);
@@ -200,7 +212,9 @@ try {
     }
 
     if ($action === 'file-download' && $method === 'GET') {
-        require_user();
+        $user = require_user();
+        $portalAccess = portal_access_for_user($user);
+        if (!$portalAccess['foundation'] && !$portalAccess['board'] && !$portalAccess['admin']) { http_response_code(403); exit('Keine Berechtigung.'); }
         ensure_project_files_table();
         $id = (string)($_GET['id'] ?? '');
         $stmt = db()->prepare('SELECT storage_name, original_name, mime, size_bytes FROM project_files WHERE id = ? AND active = 1 LIMIT 1');

@@ -7,6 +7,8 @@ import { cloudEnabled, createUserAccount, listUserAccounts, updateUserAccount } 
 import './admin.css'
 
 export const PERMISSIONS = [
+  ['access_foundation', 'Bereich Gründung', 'Öffnet den internen Arbeitsraum für Gründungsmitglieder.'],
+  ['access_board', 'Bereich Vorstand', 'Öffnet den vertraulichen Vorstandsbereich.'],
   ['documents_edit', 'Gemeinsame Dokumente bearbeiten', 'Darf gemeinsame Arbeitsdokumente verändern und Versionen speichern.'],
   ['documents_finalize', 'Dokumente finalisieren', 'Darf Arbeitsfassungen abschließen und in der Dateiablage archivieren.'],
   ['files_manage', 'Dateien & Ordner verwalten', 'Darf Dateien hochladen und Ordner für die gemeinsame Ablage anlegen.'],
@@ -33,6 +35,8 @@ const defaultPermissions = (kind, role) => {
   if (role === 'admin') return Object.fromEntries(PERMISSIONS.map(([id]) => [id, true]))
   if (role === 'viewer') return Object.fromEntries(PERMISSIONS.map(([id]) => [id, false]))
   if (kind === 'founder') return {
+    access_foundation: true,
+    access_board: false,
     documents_edit: true,
     documents_finalize: true,
     files_manage: true,
@@ -68,10 +72,10 @@ function Avatar({ name = '' }) {
   return <span className="admin-avatar">{letters}</span>
 }
 
-export default function AdminBackend({ project, user, mutate, setToast }) {
+export default function AdminBackend({ project, user, mutate, setToast, initialTab = null }) {
   const isAdmin = user.role === 'admin'
   const canCms = isAdmin || Boolean(project.profiles.find((p) => p.email === user.email)?.permissions?.cms_manage)
-  const [tab, setTab] = useState(isAdmin ? 'users' : 'cms')
+  const [tab, setTab] = useState(initialTab || (isAdmin ? 'users' : 'cms'))
   const [accounts, setAccounts] = useState([])
   const [loading, setLoading] = useState(false)
   const [showNew, setShowNew] = useState(false)
