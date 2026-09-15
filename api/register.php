@@ -52,6 +52,8 @@ if (!$privacyAccepted) {
 
 try {
     ensure_account_security_schema();
+    // Administrativ angelegte Konten bleiben standardmäßig bestätigt; Selbstregistrierungen setzen explizit NULL.
+    db()->exec('ALTER TABLE users MODIFY email_verified_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP');
     $hash = password_hash($password, PASSWORD_DEFAULT);
     db()->beginTransaction();
     db()->prepare('INSERT INTO users (email, name, password_hash, role, active, email_verified_at, updated_at) VALUES (?, ?, ?, ?, 1, NULL, NOW())')
