@@ -102,3 +102,5 @@ jobs:
           git add api/index.php src/PortalRoot.jsx src/portal.css
           git commit -m "Integrate STRATO email verification and reset flow" || exit 0
           git push
+
+# one-time integration trigger 2026-09-15
