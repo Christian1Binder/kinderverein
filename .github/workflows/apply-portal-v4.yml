@@ -17,10 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Apply portal v4 migration
         run: python scripts/apply-portal-v4.py
-      - name: Install and build
+      - name: Install and verify STRATO build
         run: |
           npm install
-          npm run build
+          npm run build:strato
       - name: Commit portal v4
         run: |
           git config user.name "github-actions[bot]"
