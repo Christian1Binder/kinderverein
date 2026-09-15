@@ -1,0 +1,29 @@
+name: Apply permission and upload migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-permissions-uploads-word.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migration
+        run: python scripts/apply-permissions-uploads-word.py
+      - name: Install dependencies and verify build
+        run: |
+          npm install
+          npm run build
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src/AppV2.jsx src/AdminBackend.jsx api/access.php api/index.php api/users.php
+          git commit -m "Harden portal rights and add folder uploads and Word import" || exit 0
+          git push
