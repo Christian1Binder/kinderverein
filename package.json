@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prepare:source": "node scripts/restore-source.mjs",
     "build": "vite build",
-    "build:pages": "vite build --base=/kinderverein/ --outDir dist",
     "build:strato": "node scripts/build-strato.mjs",
     "preview": "vite preview"
   },

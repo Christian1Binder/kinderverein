@@ -4,8 +4,8 @@ const phase = (id, title, start, end, status, milestone, owner, description) => 
 
 export const seedState = {
   meta: {
-    projectName: 'Kinderverein · Gründung e.V.',
-    subtitle: 'Projektzentrale für Aufbau, Gemeinnützigkeit und Trägerfähigkeit',
+    projectName: 'WeKiB e.V. · Gründung',
+    subtitle: 'Portal für Gründung, Vereinsorganisation und Trägerfähigkeit',
     location: 'Langenzenn · Bayern',
     lastUpdated: '2026-09-13T10:00:00+02:00',
     targetReady: '2027-04-01',

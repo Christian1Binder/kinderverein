@@ -5,3 +5,5 @@ dist-strato
 .env.local
 .DS_Store
 api/private/config.php
+api/private/mail.php
+api/private/uploads/

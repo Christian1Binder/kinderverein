@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  ArrowRight, BookOpen, Building2, CheckCircle2, ChevronRight, GraduationCap,
-  LockKeyhole, Menu, Moon, ShieldCheck, Sparkles, Sun, UserPlus, Users, X,
-} from 'lucide-react'
+import { ArrowRight, Menu, Moon, ShieldCheck, Sun, X } from 'lucide-react'
 import AppV2 from './AppV2.jsx'
 import { PortalBlocks, DEFAULT_PUBLIC_BLOCKS } from './PortalBlocks.jsx'
 import { accountUrl, cloudEnabled, getSession, loadPublicContent, onAuthChange, registerSelf, signInWithEmail } from './lib/projectStore.js'
@@ -102,7 +99,6 @@ function PublicPortal({ onAuthenticated }) {
     try {
       const session = await signInWithEmail(login.email, login.password)
       setAuthUrl('')
-      setAuthUrl('')
       onAuthenticated(session)
     } catch (error) {
       setMessage(error.message)
@@ -150,7 +146,7 @@ function PublicPortal({ onAuthenticated }) {
     {authOpen && <div className="portal-modal-backdrop" onMouseDown={closeAuth}><div className="portal-auth-card" onMouseDown={(e) => e.stopPropagation()}>
       <button className="portal-modal-close" onClick={closeAuth}><X size={19} /></button>
       <div className="portal-auth-brand"><span>W</span><div><strong>WeKiB Portal</strong><small>{mode === 'login' ? 'Willkommen zurück' : 'Dein persönlicher Zugang'}</small></div></div>
-      <div className="portal-auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setMessage('') }}>Anmelden</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setMessage('') }}>Registrieren</button></div>
+      <div className="portal-auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setMessage(''); setAuthUrl('login') }}>Anmelden</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setMessage(''); setAuthUrl('register') }}>Registrieren</button></div>
       {mode === 'login' ? <form className="portal-auth-form" method="post" action="?auth=login" autoComplete="on" onSubmit={submitLogin}>
         <label htmlFor="wekib-login-email">E-Mail-Adresse<input id="wekib-login-email" name="username" type="email" inputMode="email" required autoComplete="username" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} /></label>
         <label htmlFor="wekib-login-password">Passwort<input id="wekib-login-password" name="password" type="password" required autoComplete="current-password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
@@ -170,10 +166,3 @@ function PublicPortal({ onAuthenticated }) {
   </div>
 }
 
-function Offer({ icon: Icon, number, title, text }) {
-  return <article className="public-offer"><span>{number}</span><Icon size={24} /><h3>{title}</h3><p>{text}</p><i /></article>
-}
-
-function Level({ depth, title, text, active = false }) {
-  return <div className={active ? 'portal-level active' : 'portal-level'}><span>{depth}</span><div><strong>{title}</strong><small>{text}</small></div><ChevronRight size={17} /></div>
-}

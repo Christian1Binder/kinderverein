@@ -1,97 +1,60 @@
 # STRATO: LAB und PROD
 
-Die Projektzentrale läuft auf klassischem STRATO-Webhosting als gebaute React/Vite-App plus PHP-Backend. Login und gemeinsame Projektdaten liegen in einer STRATO-MySQL/MariaDB-Datenbank. GitHub enthält Quellcode und Deployment-Workflows, aber keine Datenbank-Passwörter.
+WeKiB läuft als React/Vite-Frontend mit PHP-Backend und MySQL/MariaDB auf STRATO. GitHub enthält Quellcode und Build-/Deployment-Logik, aber keine produktiven Zugangsdaten.
 
-## Zielarchitektur
-
-Es gibt zwei vollständig getrennte Umgebungen:
-
-### LAB / Test
-
-- Beispiel: `http://betruungmachtschule.binder-lab.com/`
-- eigener STRATO-Webordner
-- eigene LAB-Datenbank
-- eigenes `api/private/config.php`
-- neue Quellcode-Änderungen dürfen hier automatisch veröffentlicht werden
-- LAB-Builds zeigen rechts oben den Hinweis `LAB · TESTUMGEBUNG`
-
-### PROD / Live
-
-- spätere endgültige Domain oder Subdomain
-- eigener STRATO-Webordner
-- eigene PROD-Datenbank
-- eigenes `api/private/config.php`
-- keine automatische Veröffentlichung bei normalen Code-Änderungen
-- veröffentlicht wird ausschließlich eine ausdrücklich freigegebene, zuvor im LAB getestete Git-Commit-Version
-
-LAB und PROD dürfen niemals dieselbe Datenbank verwenden. Dadurch können Tests, Benutzerkonten und Testdaten die Live-Daten nicht beschädigen.
-
-## GitHub Workflows
-
-### `Build STRATO package`
-
-Erzeugt nur ein ZIP/Artifact. Dieser Workflow veröffentlicht nichts auf STRATO.
-
-### `Deploy LAB to STRATO`
-
-Wird bei relevanten Änderungen auf `main` automatisch gebaut. Sind die LAB-SFTP-Secrets vorhanden, wird die neue Version anschließend auf die LAB-Seite übertragen. `api/private/config.php` wird beim Deployment nicht überschrieben.
-
-Ein erneuter LAB-Deploy ohne Codeänderung kann durch eine Änderung an `.deploy/lab-trigger.txt` ausgelöst werden.
-
-### `Deploy tested version to PROD`
-
-PROD wird nicht bei normalen Änderungen aktualisiert. In `.deploy/production-source.txt` wird die exakte 40-stellige Commit-SHA der im LAB geprüften Version eingetragen. Nur eine Änderung dieser Datei startet den Produktions-Workflow.
-
-Der Produktions-Workflow checkt exakt diese Commit-Version aus, baut sie neu für PROD und lädt sie hoch. Dadurch kann nicht versehentlich ein neuerer, noch ungeprüfter Stand live gehen.
-
-## GitHub Secrets
-
-Unter **Repository → Settings → Secrets and variables → Actions** werden folgende Werte einmalig hinterlegt.
+## Umgebungen
 
 ### LAB
 
-- `STRATO_LAB_HOST`
-- `STRATO_LAB_USER`
-- `STRATO_LAB_PASSWORD`
-- `STRATO_LAB_REMOTE_PATH`
+- `http://betruungmachtschule.binder-lab.com/`
+- eigener Webordner und eigene Datenbank
+- automatische Veröffentlichung relevanter Änderungen auf `main`
+- sichtbarer LAB-Hinweis im Frontend
 
 ### PROD
 
-- `STRATO_PROD_HOST`
-- `STRATO_PROD_USER`
-- `STRATO_PROD_PASSWORD`
-- `STRATO_PROD_REMOTE_PATH`
+- eigener Webordner und eigene Datenbank
+- keine automatische Veröffentlichung normaler Commits
+- veröffentlicht wird ausschließlich eine ausdrücklich ausgewählte, im LAB geprüfte Commit-SHA
 
-Die Werte werden niemals in Quellcode oder Chat geschrieben.
+LAB und PROD dürfen niemals dieselbe Datenbank verwenden.
 
-Am einfachsten sind zwei getrennte STRATO-SFTP-Zugänge, deren Startverzeichnis jeweils direkt auf den LAB- bzw. PROD-Ordner zeigt. Dann kann `*_REMOTE_PATH` jeweils `.` sein.
+## Dauerhafte GitHub-Workflows
 
-## Erstinstallation einer Umgebung
+- **Build STRATO package:** reproduzierbarer Build ohne Veröffentlichung
+- **Deploy LAB to STRATO:** Build + automatische LAB-Übertragung
+- **Deploy tested version to PROD:** kontrollierte Promotion einer exakten getesteten Commit-SHA
 
-Nach dem ersten Upload einer Umgebung einmal deren `api/setup.php` öffnen. Dort werden die Datenbankdaten dieser Umgebung und das erste Admin-Konto eingerichtet.
+`.deploy/production-source.txt` bleibt solange `NOT_SET`, bis bewusst eine getestete Version für PROD freigegeben wird.
 
-Die Setup-Seite erzeugt die benötigten Tabellen und schreibt `api/private/config.php` nur auf den jeweiligen STRATO-Webspace. Diese Datei wird bei späteren GitHub-Deployments ausdrücklich ausgespart.
+## Server-only Dateien
 
-Für LAB und PROD muss `setup.php` jeweils mit der passenden, getrennten Datenbank durchgeführt werden.
+Diese Daten gehören ausschließlich auf den jeweiligen STRATO-Webspace und werden nicht aus GitHub deployed:
 
-## Empfohlener Arbeitsablauf
+- `api/private/config.php` – Datenbank und App-Key
+- `api/private/mail.php` – STRATO-SMTP-Zugang
+- `api/private/uploads/` – hochgeladene Nutzdateien
 
-1. Änderungen werden im GitHub-Repository erstellt.
-2. GitHub baut und veröffentlicht automatisch ins LAB, sobald die LAB-Secrets eingerichtet sind.
-3. Funktion auf der LAB-Seite mit Testdaten prüfen.
-4. Wenn die Version freigegeben ist, wird die erfolgreiche LAB-Commit-SHA als Produktionsquelle festgelegt.
-5. GitHub baut genau diese geprüfte Version für PROD und veröffentlicht sie dort.
+Die Deployment-Workflows schließen diese Pfade ausdrücklich aus.
 
-Damit kann die Veröffentlichung künftig aus dem Chat angestoßen werden: Für LAB wird der LAB-Trigger aktualisiert. Für PROD wird zuerst der letzte erfolgreiche LAB-Stand ermittelt und anschließend genau dessen Commit-SHA in `.deploy/production-source.txt` eingetragen.
+## GitHub Secrets
 
-## Wichtige Sicherheitsregeln
+LAB: `STRATO_LAB_HOST`, `STRATO_LAB_USER`, `STRATO_LAB_PASSWORD`, `STRATO_LAB_REMOTE_PATH`
 
-- `api/private/config.php` niemals in GitHub hochladen.
-- Datenbank- und SFTP-Passwörter niemals im Chat oder Repository posten.
-- LAB und PROD verwenden getrennte Datenbanken.
-- PROD nur nach erfolgreichem LAB-Test veröffentlichen.
-- Solange die Seite nur über HTTP erreichbar ist, keine sensiblen Kinder-, Personal- oder Vertragsdaten in der Anwendung speichern. Vor echtem Team-/Produktivbetrieb sollte HTTPS eingerichtet werden.
+PROD: `STRATO_PROD_HOST`, `STRATO_PROD_USER`, `STRATO_PROD_PASSWORD`, `STRATO_PROD_REMOTE_PATH`
 
-## Build-Metadaten
+## Erstinstallation
 
-Jeder LAB- und PROD-Build enthält eine Datei `deployment-info.json` mit Umgebung, Git-Commit und Build-Zeitpunkt. Damit lässt sich später eindeutig nachvollziehen, welche Quellcode-Version tatsächlich auf STRATO liegt.
+Nach dem ersten Upload `api/setup.php` im jeweiligen Ziel öffnen und dort die Datenbank sowie das erste Admin-Konto einrichten. Die SMTP-Konfiguration wird anschließend über die geschützte Mail-Setup-Seite auf STRATO hinterlegt.
+
+## Arbeitsablauf
+
+1. Änderungen nach `main` bringen.
+2. Automatischen LAB-Build und SFTP-Deploy prüfen.
+3. Funktionen im LAB mit Testdaten testen.
+4. Erst nach Freigabe die exakte getestete Commit-SHA als PROD-Quelle setzen.
+5. PROD-Workflow kontrollieren.
+
+## Sicherheit
+
+Solange die LAB-Seite nur über HTTP erreichbar ist, keine sensiblen Kinder-, Personal-, Vertrags- oder echten Finanzdaten einpflegen. Für den späteren Echtbetrieb ist HTTPS erforderlich. Datenbank-, Mail- und SFTP-Passwörter niemals in GitHub oder Quellcode ablegen.

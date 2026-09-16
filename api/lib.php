@@ -129,9 +129,8 @@ function issue_auth_token(int $userId): void {
     $token = bin2hex(random_bytes(32));
     $hash = hash('sha256', $token);
     $expires = time() + AUTH_LIFETIME;
-    $expiresSql = gmdate('Y-m-d H:i:s', $expires);
-    db()->prepare('INSERT INTO auth_sessions (token_hash, user_id, expires_at, last_used_at) VALUES (?, ?, ?, NOW())')
-        ->execute([$hash, $userId, $expiresSql]);
+    db()->prepare('INSERT INTO auth_sessions (token_hash, user_id, expires_at, last_used_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 12 HOUR), NOW())')
+        ->execute([$hash, $userId]);
     setcookie(AUTH_COOKIE, $token, auth_cookie_options($expires));
     $_COOKIE[AUTH_COOKIE] = $token;
 }

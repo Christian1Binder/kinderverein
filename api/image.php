@@ -1,19 +1,23 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/lib.php';
+require __DIR__ . '/access.php';
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
 
 try {
-    require_user();
+    $user = require_user();
     ensure_project_files_table();
 
     $id = trim((string)($_GET['id'] ?? ''));
     if ($id === '') {
         http_response_code(400);
         exit('Bild-ID fehlt.');
+    }
+    if (!portal_can_access_file($user, $id)) {
+        http_response_code(403);
+        exit('Keine Berechtigung.');
     }
 
     $stmt = db()->prepare('SELECT storage_name, original_name, mime, size_bytes FROM project_files WHERE id = ? AND active = 1 LIMIT 1');

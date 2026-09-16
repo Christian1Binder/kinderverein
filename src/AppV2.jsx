@@ -12,32 +12,6 @@ import TextAlign from '@tiptap/extension-text-align'
 import Highlight from '@tiptap/extension-highlight'
 import Link from '@tiptap/extension-link'
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import * as mammoth from 'mammoth'
 import {
   Activity, ArrowDown, ArrowUp, Bell, Bold, CalendarDays, Check, CheckSquare2,
@@ -368,7 +342,7 @@ function AppV2() {
       <aside className={`sidebar ${sidebarOpen ? 'is-open' : ''}`}>
         <div className="brand">
           <div className="brand-mark">W</div>
-          <div><strong>{project.settings.brandName || 'WeKiB'}</strong><span>Gründungsplattform</span></div>
+          <div><strong>{project.settings.brandName || 'WeKiB'}</strong><span>Portal · Gründung & Verein</span></div>
         </div>
         <nav className="nav-stack">
           <button className={`nav-item ${page === 'dashboard' ? 'active' : ''}`} onClick={() => go('dashboard')}><LayoutDashboard size={18} /><span>Mein WeKiB</span></button>
@@ -474,9 +448,9 @@ function LoginScreen({ email, setEmail, password, setPassword, message, onSubmit
     <button className="login-theme icon-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
     <div className="login-panel">
       <div className="brand-mark large">W</div>
-      <p className="eyebrow">WEKIB · GRÜNDUNG</p>
-      <h1>Gemeinsam gestalten.<br />Sauber gründen.</h1>
-      <p className="lead">Die interne Arbeitsplattform für Gründungsmitglieder, Dokumente, Entscheidungen und den gemeinsamen Fahrplan.</p>
+      <p className="eyebrow">WEKIB · PORTAL</p>
+      <h1>Gemeinsam organisieren.<br />Verlässlich handeln.</h1>
+      <p className="lead">Der geschützte Arbeitsbereich für Gründung, Vorstand, Dokumente, Entscheidungen und Vereinsorganisation.</p>
       <form onSubmit={onSubmit} className="login-form" method="post" action="?auth=login" autoComplete="on">
         <label htmlFor="wekib-internal-email">E-Mail-Adresse<input id="wekib-internal-email" name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
         <label htmlFor="wekib-internal-password">Passwort<input id="wekib-internal-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>

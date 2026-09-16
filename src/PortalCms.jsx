@@ -13,7 +13,7 @@ const TYPES = [
 const uid = (prefix='block') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`
 
 function makeBlock(type, audience) {
-  const base = { id: uid(), type, audience }
+  const base = { id: uid(), type, audience, anchor: '' }
   if (type === 'hero') return { ...base, eyebrow: audience === 'public' ? 'WEKIB' : 'MEIN WEKIB', title: 'Neue Überschrift', text: 'Hier steht der beschreibende Text.', buttonLabel: '', buttonHref: '' }
   if (type === 'text') return { ...base, eyebrow: '', title: 'Neue Überschrift', text: 'Textinhalt' }
   if (type === 'image') return { ...base, eyebrow: '', title: 'Bildbereich', text: 'Beschreibung', imageId: '', imageAlt: '' }
@@ -84,6 +84,7 @@ function BlockEditor({ block, onChange, onDelete, onDuplicate, onUp, onDown, set
 function Fields({ block, onChange }) {
   const common = ['hero','text','image'].includes(block.type)
   return <>
+    {block.audience === 'public' && <label>Sprungmarke / URL-Anker<input value={block.anchor || ''} onChange={(e)=>onChange({anchor:e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'')})} placeholder="z. B. angebote" /></label>}
     {common && <><label>Kicker / kleine Überschrift<input value={block.eyebrow || ''} onChange={(e)=>onChange({eyebrow:e.target.value})}/></label><label>Überschrift<input value={block.title || ''} onChange={(e)=>onChange({title:e.target.value})}/></label><label>Text<textarea value={block.text || ''} onChange={(e)=>onChange({text:e.target.value})}/></label></>}
     {block.type === 'image' && <label>Alternativtext<input value={block.imageAlt || ''} onChange={(e)=>onChange({imageAlt:e.target.value})}/></label>}
     {block.type === 'hero' && <div className="cms-inline-grid"><label>Buttontext<input value={block.buttonLabel || ''} onChange={(e)=>onChange({buttonLabel:e.target.value})}/></label><label>Link / Anker<input value={block.buttonHref || ''} onChange={(e)=>onChange({buttonHref:e.target.value})}/></label></div>}
