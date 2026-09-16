@@ -12,6 +12,7 @@ on:
       - 'src/document-scanner.css'
       - 'scripts/apply-file-explorer.py'
       - 'scripts/apply-scanner-and-fixes.py'
+      - 'scripts/apply-member-portal-ux.py'
 
 permissions:
   contents: write
@@ -27,6 +28,8 @@ jobs:
         run: python scripts/apply-scanner-and-fixes.py
       - name: Apply hierarchical file explorer
         run: python scripts/apply-file-explorer.py
+      - name: Apply member portal UX fixes
+        run: python scripts/apply-member-portal-ux.py
       - name: Install and verify STRATO build
         run: |
           npm install
@@ -36,5 +39,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json src api
-          git commit -m "Add professional document scanner and file explorer" || exit 0
+          git commit -m "Improve member portal polls routing and activity feed" || exit 0
           git push
