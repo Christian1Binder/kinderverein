@@ -10,9 +10,11 @@ on:
       - 'src/file-explorer.css'
       - 'src/DocumentScanner.jsx'
       - 'src/document-scanner.css'
+      - 'src/MemberPollAdmin.jsx'
       - 'scripts/apply-file-explorer.py'
       - 'scripts/apply-scanner-and-fixes.py'
       - 'scripts/apply-member-portal-ux.py'
+      - 'scripts/apply-preview-poll-admin.py'
 
 permissions:
   contents: write
@@ -30,6 +32,8 @@ jobs:
         run: python scripts/apply-file-explorer.py
       - name: Apply member portal UX fixes
         run: python scripts/apply-member-portal-ux.py
+      - name: Apply role preview and poll analytics
+        run: python scripts/apply-preview-poll-admin.py
       - name: Install and verify STRATO build
         run: |
           npm install
@@ -39,5 +43,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json src api
-          git commit -m "Improve member portal polls routing and activity feed" || exit 0
+          git commit -m "Add role preview and member poll analytics" || exit 0
           git push
