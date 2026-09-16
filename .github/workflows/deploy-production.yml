@@ -52,9 +52,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build production package
         env:
@@ -80,7 +81,7 @@ jobs:
         if: ${{ env.STRATO_HOST != '' && env.STRATO_USER != '' && env.STRATO_PASSWORD != '' }}
         run: |
           TARGET="${STRATO_REMOTE_PATH:-.}"
-          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob api/private/config.php dist-strato/ $TARGET; bye"
+          lftp -u "$STRATO_USER,$STRATO_PASSWORD" "sftp://$STRATO_HOST:22" -e "set sftp:auto-confirm yes; mirror -R --verbose --exclude-glob api/private/config.php --exclude-glob api/private/mail.php --exclude-glob api/private/uploads/** dist-strato/ $TARGET; bye"
 
       - name: PROD connection not configured
         if: ${{ env.STRATO_HOST == '' || env.STRATO_USER == '' || env.STRATO_PASSWORD == '' }}

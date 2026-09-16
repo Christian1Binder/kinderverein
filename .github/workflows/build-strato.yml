@@ -8,8 +8,9 @@ on:
       - 'api/**'
       - 'scripts/**'
       - 'package.json'
+      - 'package-lock.json'
       - 'vite.config.js'
-      - 'index.source.html'
+      - 'index.html'
       - '.github/workflows/build-strato.yml'
   workflow_dispatch:
 
@@ -24,9 +25,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build STRATO package
         env:
