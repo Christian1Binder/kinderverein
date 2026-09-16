@@ -2,3 +2,4 @@ LAB redeploy trigger. Änderungen an dieser Datei können einen erneuten LAB-Dep
 
 2026-09-14: Unified document hub with uploads and downloads.
 2026-09-15: Hierarchical file explorer and professional mobile document scanner.
+2026-09-16: Member polls, deep links, password-manager forms and meaningful activity feed.
