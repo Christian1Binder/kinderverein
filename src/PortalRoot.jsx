@@ -45,6 +45,14 @@ function PublicPortal({ onAuthenticated }) {
   const [publicBlocks, setPublicBlocks] = useState(DEFAULT_PUBLIC_BLOCKS)
 
   useEffect(() => {
+    const authParam = new URL(window.location.href).searchParams.get('auth')
+    if (authParam === 'login' || authParam === 'register') {
+      setMode(authParam)
+      setAuthOpen(true)
+    }
+  }, [])
+
+  useEffect(() => {
     loadPublicContent().then((blocks) => { if (Array.isArray(blocks) && blocks.length) setPublicBlocks(blocks) }).catch(() => {})
   }, [])
 
@@ -67,11 +75,24 @@ function PublicPortal({ onAuthenticated }) {
     window.history.replaceState({}, '', window.location.pathname + window.location.hash)
   }, [])
 
+  const setAuthUrl = (nextMode = '') => {
+    const url = new URL(window.location.href)
+    if (nextMode) url.searchParams.set('auth', nextMode)
+    else url.searchParams.delete('auth')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+
   const openAuth = (nextMode) => {
     setMode(nextMode)
     setMessage('')
     setAuthOpen(true)
     setMenu(false)
+    setAuthUrl(nextMode)
+  }
+
+  const closeAuth = () => {
+    setAuthOpen(false)
+    setAuthUrl('')
   }
 
   const submitLogin = async (event) => {
@@ -80,6 +101,7 @@ function PublicPortal({ onAuthenticated }) {
     setMessage('')
     try {
       const session = await signInWithEmail(login.email, login.password)
+      setAuthUrl('')
       onAuthenticated(session)
     } catch (error) {
       setMessage(error.message)
@@ -94,6 +116,7 @@ function PublicPortal({ onAuthenticated }) {
     try {
       const result = await registerSelf(register)
       setMode('login')
+      setAuthUrl('login')
       setLogin({ email: register.email, password: '' })
       setRegister({ name: '', email: '', password: '', password2: '', privacyAccepted: false })
       setMessage(result.message || 'Konto angelegt. Bitte bestätige deine E-Mail-Adresse über den Link in deinem Postfach.')
@@ -123,20 +146,20 @@ function PublicPortal({ onAuthenticated }) {
 
     <footer className="public-footer"><div className="public-brand"><span>W</span><div><strong>WeKiB</strong><small>Verein in Gründung</small></div></div><p>Bildung · Betreuung · Gemeinschaft</p><button onClick={() => openAuth('login')}>Portal</button></footer>
 
-    {authOpen && <div className="portal-modal-backdrop" onMouseDown={() => setAuthOpen(false)}><div className="portal-auth-card" onMouseDown={(e) => e.stopPropagation()}>
-      <button className="portal-modal-close" onClick={() => setAuthOpen(false)}><X size={19} /></button>
+    {authOpen && <div className="portal-modal-backdrop" onMouseDown={closeAuth}><div className="portal-auth-card" onMouseDown={(e) => e.stopPropagation()}>
+      <button className="portal-modal-close" onClick={closeAuth}><X size={19} /></button>
       <div className="portal-auth-brand"><span>W</span><div><strong>WeKiB Portal</strong><small>{mode === 'login' ? 'Willkommen zurück' : 'Dein persönlicher Zugang'}</small></div></div>
       <div className="portal-auth-tabs"><button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setMessage('') }}>Anmelden</button><button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setMessage('') }}>Registrieren</button></div>
-      {mode === 'login' ? <form className="portal-auth-form" onSubmit={submitLogin}>
-        <label>E-Mail-Adresse<input type="email" required autoComplete="username" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} /></label>
-        <label>Passwort<input type="password" required autoComplete="current-password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
+      {mode === 'login' ? <form className="portal-auth-form" method="post" action="?auth=login" autoComplete="on" onSubmit={submitLogin}>
+        <label htmlFor="wekib-login-email">E-Mail-Adresse<input id="wekib-login-email" name="username" type="email" inputMode="email" required autoComplete="username" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} /></label>
+        <label htmlFor="wekib-login-password">Passwort<input id="wekib-login-password" name="password" type="password" required autoComplete="current-password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
         <div className="portal-account-links"><a href={accountUrl('reset.php')}>Passwort vergessen?</a><a href={accountUrl('resend.php')}>Bestätigungs-Mail erneut senden</a></div>
         <button className="portal-primary full" disabled={busy}>{busy ? 'Anmeldung läuft …' : 'Anmelden'} <ArrowRight size={16} /></button>
-      </form> : <form className="portal-auth-form" onSubmit={submitRegister}>
-        <label>Name<input required minLength="2" value={register.name} onChange={(e) => setRegister({ ...register, name: e.target.value })} /></label>
-        <label>E-Mail-Adresse<input type="email" required autoComplete="email" value={register.email} onChange={(e) => setRegister({ ...register, email: e.target.value })} /></label>
-        <label>Passwort <small>mindestens 12 Zeichen</small><input type="password" required minLength="12" autoComplete="new-password" value={register.password} onChange={(e) => setRegister({ ...register, password: e.target.value })} /></label>
-        <label>Passwort wiederholen<input type="password" required minLength="12" autoComplete="new-password" value={register.password2} onChange={(e) => setRegister({ ...register, password2: e.target.value })} /></label>
+      </form> : <form className="portal-auth-form" method="post" action="?auth=register" autoComplete="on" onSubmit={submitRegister}>
+        <label htmlFor="wekib-register-name">Name<input id="wekib-register-name" name="name" autoComplete="name" required minLength="2" value={register.name} onChange={(e) => setRegister({ ...register, name: e.target.value })} /></label>
+        <label htmlFor="wekib-register-email">E-Mail-Adresse<input id="wekib-register-email" name="email" type="email" inputMode="email" required autoComplete="email" value={register.email} onChange={(e) => setRegister({ ...register, email: e.target.value })} /></label>
+        <label htmlFor="wekib-register-password">Passwort <small>mindestens 12 Zeichen</small><input id="wekib-register-password" name="new-password" type="password" required minLength="12" autoComplete="new-password" value={register.password} onChange={(e) => setRegister({ ...register, password: e.target.value })} /></label>
+        <label htmlFor="wekib-register-password2">Passwort wiederholen<input id="wekib-register-password2" name="new-password-confirmation" type="password" required minLength="12" autoComplete="new-password" value={register.password2} onChange={(e) => setRegister({ ...register, password2: e.target.value })} /></label>
         <label className="portal-check"><input type="checkbox" required checked={register.privacyAccepted} onChange={(e) => setRegister({ ...register, privacyAccepted: e.target.checked })} /><span>Ich möchte ein WeKiB-Portal-Konto anlegen. Interne Bereiche werden erst nach Freigabe durch einen Administrator sichtbar.</span></label>
         <button className="portal-primary full" disabled={busy}>{busy ? 'Konto wird erstellt …' : 'Konto erstellen'} <ArrowRight size={16} /></button>
       </form>}

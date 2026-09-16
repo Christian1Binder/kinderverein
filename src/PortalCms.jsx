@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, Eye, ImagePlus, Plus, Trash2 } from 'lucide-react'
 import { PortalBlocks, DEFAULT_MEMBER_BLOCKS, DEFAULT_PUBLIC_BLOCKS } from './PortalBlocks.jsx'
 import { projectImageUrl, uploadProjectFile } from './lib/projectStore.js'
+import PollsWithImages from './PollsWithImages.jsx'
 
 const TYPES = [
   ['hero', 'Hero / Aufmacher'], ['text', 'Textbereich'], ['image', 'Bild + Text'], ['cards', 'Karten'],
@@ -25,7 +26,7 @@ function makeBlock(type, audience) {
   return { ...base, size: 'medium' }
 }
 
-export default function PortalCms({ project, mutate, setToast }) {
+export default function PortalCms({ project, user, mutate, setToast }) {
   const [audience, setAudience] = useState('public')
   const [preview, setPreview] = useState(false)
   const blocks = useMemo(() => audience === 'public'
@@ -36,7 +37,7 @@ export default function PortalCms({ project, mutate, setToast }) {
     p.settings ||= {}
     if (audience === 'public') p.settings.publicBlocks = next
     else p.settings.memberBlocks = next
-  }, `${audience === 'public' ? 'Öffentliche Website' : 'Mitgliederbereich'} im CMS geändert`)
+  })
 
   const add = (type) => writeBlocks([...blocks, makeBlock(type, audience)])
   const update = (id, patch) => writeBlocks(blocks.map((b) => b.id === id ? { ...b, ...patch } : b))
@@ -59,6 +60,7 @@ export default function PortalCms({ project, mutate, setToast }) {
       <aside className="cms-palette card"><strong>Bausteine</strong><small>Baustein anklicken, um ihn unten anzufügen.</small>{TYPES.map(([type,label]) => <button key={type} onClick={() => add(type)}><Plus size={14} /> {label}</button>)}</aside>
       <section className="cms-canvas">{blocks.map((block,index) => <BlockEditor key={block.id} block={block} onChange={(patch) => update(block.id, patch)} onDelete={() => remove(block.id)} onDuplicate={() => duplicate(block)} onUp={() => move(index,-1)} onDown={() => move(index,1)} setToast={setToast} />)}</section>
     </div>}
+    {audience === 'member' && !preview && user && <section className="cms-member-polls"><PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate scope="member" uploadScope="member-cms" embedded heading="Umfragen im Mitgliederbereich" intro="Erstelle Abstimmungen für registrierte Nutzer. Pro Konto ist bei diesen Umfragen genau eine Stimme möglich; Bilder je Antwortoption sind erlaubt." /></section>}
   </div>
 }
 

@@ -20,6 +20,15 @@ import Link from '@tiptap/extension-link'
 
 
 
+
+
+
+
+
+
+
+
+
 import * as mammoth from 'mammoth'
 import {
   Activity, ArrowDown, ArrowUp, Bell, Bold, CalendarDays, Check, CheckSquare2,
@@ -76,6 +85,38 @@ const clone = (value) => JSON.parse(JSON.stringify(value))
 const stripHtml = (html = '') => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 const fmtDate = (value) => value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)) : '—'
 const fmtDateTime = (value) => value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—'
+
+const PORTAL_PAGES = new Set(['dashboard','tasks','documents','files','polls','calendar','members','decisions','activity','board','treasury','studio','admin','profile'])
+function portalPageFromUrl() {
+  const value = new URL(window.location.href).searchParams.get('portal') || 'dashboard'
+  return PORTAL_PAGES.has(value) ? value : 'dashboard'
+}
+function writePortalUrl(page, replace = false) {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('auth')
+  url.searchParams.delete('verification')
+  if (!page || page === 'dashboard') url.searchParams.delete('portal')
+  else url.searchParams.set('portal', page)
+  const next = `${url.pathname}${url.search}${url.hash}`
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', next)
+}
+function isImportantActivity(text = '') {
+  const value = String(text).trim()
+  if (!value) return false
+  if (/CMS geändert|Stimme bei|Profil aktualisiert|Einführung abgeschlossen|Dashboard-Anordnung geändert|Kommentar zu|Status von/i.test(value)) return false
+  return /angelegt|erstellt|hochgeladen|finalisiert|gelöscht|entfernt|gestartet|dokumentiert|freigegeben|entzogen|gesperrt|verschoben|umbenannt|bestätigt/i.test(value)
+}
+function importantActivities(items = []) {
+  const seen = new Set()
+  return items.filter((item) => isImportantActivity(item?.text)).filter((item) => {
+    const date = item?.createdAt ? new Date(item.createdAt) : null
+    const bucket = date && !Number.isNaN(date.getTime()) ? Math.floor(date.getTime() / (15 * 60 * 1000)) : 0
+    const key = `${item?.actor || ''}|${item?.text || ''}|${bucket}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 function normalizeProject(input = {}) {
   const p = clone(input)
@@ -145,7 +186,7 @@ function AppV2() {
   const [project, setProject] = useState(null)
   const [session, setSession] = useState(null)
   const [ready, setReady] = useState(false)
-  const [page, setPage] = useState('dashboard')
+  const [page, setPage] = useState(() => portalPageFromUrl())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('wekib-theme') || 'light')
   const [search, setSearch] = useState('')
@@ -161,6 +202,12 @@ function AppV2() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('wekib-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const onPopState = () => setPage(portalPageFromUrl())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -228,13 +275,32 @@ function AppV2() {
       const next = normalizeProject(current)
       recipe(next)
       next.meta.lastUpdated = nowIso()
-      if (activityText) {
-        next.activities.unshift({ id: uid('act'), text: activityText, actor: user?.name || user?.email || 'Nutzer', createdAt: nowIso(), kind: 'user' })
-        next.activities = next.activities.slice(0, 160)
+      if (isImportantActivity(activityText)) {
+        const actor = user?.name || user?.email || 'Nutzer'
+        const latest = next.activities?.[0]
+        const duplicate = latest && latest.text === activityText && latest.actor === actor && (Date.now() - new Date(latest.createdAt || 0).getTime()) < 10 * 60 * 1000
+        if (!duplicate) next.activities.unshift({ id: uid('act'), text: activityText, actor, createdAt: nowIso(), kind: 'user' })
+        next.activities = next.activities.slice(0, 120)
       }
       return next
     })
   }
+
+  useEffect(() => {
+    if (!project || !user) return
+    const target = page
+    const isAdminUser = user.role === 'admin'
+    const kind = memberKind(project, user)
+    const foundation = isAdminUser || kind === 'founder' || hasPermission(project, user, 'access_foundation')
+    const board = isAdminUser || hasPermission(project, user, 'access_board')
+    const cms = isAdminUser || hasPermission(project, user, 'cms_manage')
+    const finance = isAdminUser || (board && hasPermission(project, user, 'finance_manage'))
+    const allowed = target === 'dashboard' || target === 'profile' ||
+      (['tasks','documents','files','polls','calendar','members','decisions','activity'].includes(target) && foundation) ||
+      (target === 'board' && board) || (target === 'treasury' && finance) ||
+      (target === 'studio' && cms) || (target === 'admin' && isAdminUser)
+    if (!allowed) { setPage('dashboard'); writePortalUrl('dashboard', true) }
+  }, [page, project, user])
 
   const login = async (event) => {
     event.preventDefault()
@@ -269,6 +335,7 @@ function AppV2() {
 
   const go = (target) => {
     setPage(target)
+    writePortalUrl(target)
     setSidebarOpen(false)
     setSearch('')
   }
@@ -316,7 +383,7 @@ function AppV2() {
         </header>
 
         <div className="content-frame">
-          {page === 'dashboard' && (canFoundation ? <Dashboard project={project} user={user} mutate={mutate} go={go} /> : <MemberDashboard user={user} profile={profile} canBoard={canBoard} canCms={canCms} />)}
+          {page === 'dashboard' && (canFoundation ? <Dashboard project={project} user={user} mutate={mutate} go={go} /> : <MemberDashboard project={project} user={user} profile={profile} mutate={mutate} setToast={setToast} canBoard={canBoard} canCms={canCms} />)}
           {canFoundation && page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
           {canFoundation && page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
           {canFoundation && page === 'files' && <Files project={project} user={user} mutate={mutate} setToast={setToast} />}
@@ -339,10 +406,11 @@ function AppV2() {
   )
 }
 
-function MemberDashboard({ user, profile, canBoard, canCms }) {
-  const blocks = profile?.memberBlocks || DEFAULT_MEMBER_BLOCKS
-  return <div className="page"><PageHeader eyebrow="MEIN WEKIB" title={`Willkommen, ${firstName(profile?.displayName || user.name || user.email)}`} description="Dein registrierter Lesebereich. Zusätzliche Arbeitsbereiche erscheinen nur nach Freigabe." />
+function MemberDashboard({ project, user, profile, mutate, setToast, canBoard, canCms }) {
+  const blocks = project.settings?.memberBlocks?.length ? project.settings.memberBlocks : (profile?.memberBlocks || DEFAULT_MEMBER_BLOCKS)
+  return <div className="page member-dashboard"><PageHeader eyebrow="MEIN WEKIB" title={`Willkommen, ${firstName(profile?.displayName || user.name || user.email)}`} description="Dein erweiterter Lesebereich mit Neuigkeiten und Abstimmungen. Interne Arbeitsbereiche erscheinen ausschließlich nach Freigabe." />
     <PortalBlocks blocks={blocks} mode="member" />
+    <section className="member-polls-section"><PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate={false} scope="member" embedded heading="Mitglieder-Umfragen" intro="Stimme zu aktuellen Themen ab. Pro registriertem Konto ist je Umfrage genau eine Stimme möglich." /></section>
   </div>
 }
 
@@ -365,9 +433,9 @@ function LoginScreen({ email, setEmail, password, setPassword, message, onSubmit
       <p className="eyebrow">WEKIB · GRÜNDUNG</p>
       <h1>Gemeinsam gestalten.<br />Sauber gründen.</h1>
       <p className="lead">Die interne Arbeitsplattform für Gründungsmitglieder, Dokumente, Entscheidungen und den gemeinsamen Fahrplan.</p>
-      <form onSubmit={onSubmit} className="login-form">
-        <label>E-Mail-Adresse<input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-        <label>Passwort<input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+      <form onSubmit={onSubmit} className="login-form" method="post" action="?auth=login" autoComplete="on">
+        <label htmlFor="wekib-internal-email">E-Mail-Adresse<input id="wekib-internal-email" name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <label htmlFor="wekib-internal-password">Passwort<input id="wekib-internal-password" name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         <button className="primary-btn" type="submit">Anmelden <ChevronRight size={18} /></button>
         {message && <div className="form-message">{message}</div>}
       </form>
@@ -398,7 +466,7 @@ function Dashboard({ project, user, mutate, go }) {
     documents: <DashboardCard key="documents" title="Gründungsunterlagen" action={<button onClick={() => go('documents')}>Dokumentenraum</button>}><div className="doc-progress"><div className="progress-ring" style={{ '--progress': `${progress * 3.6}deg` }}><span>{progress}%</span></div><div><strong>{completeDocs} Dokumente abgeschlossen</strong><p>{project.documents.filter((d) => d.status === 'in_progress').length} befinden sich aktuell in Bearbeitung.</p></div></div></DashboardCard>,
     polls: <DashboardCard key="polls" title="Entscheidungen brauchen Stimmen" action={<button onClick={() => go('polls')}>Umfragen</button>}><div className="stack-list">{openPolls.length ? openPolls.slice(0, 3).map((poll) => <div className="list-row" key={poll.id}><Vote size={18} /><div><strong>{poll.title}</strong><span>endet {fmtDate(poll.closes)}</span></div></div>) : <EmptyState compact text="Aktuell keine offene Umfrage." />}</div></DashboardCard>,
     calendar: <DashboardCard key="calendar" title="Nächste Termine" action={<button onClick={() => go('calendar')}>Kalender</button>}><div className="stack-list">{upcoming.length ? upcoming.map((event) => <div className="calendar-row" key={event.id}><div className="date-tile"><strong>{new Date(event.date).getDate()}</strong><span>{new Intl.DateTimeFormat('de-DE', { month: 'short' }).format(new Date(event.date))}</span></div><div><strong>{event.title}</strong><span>{event.time || 'ganztägig'} · {event.category || 'Termin'}</span></div></div>) : <EmptyState compact text="Noch keine Termine eingetragen." />}</div></DashboardCard>,
-    activity: <DashboardCard key="activity" title="Was sich zuletzt bewegt hat" action={<button onClick={() => go('activity')}>Verlauf</button>}><Timeline items={project.activities.slice(0, 5)} /></DashboardCard>,
+    activity: <DashboardCard key="activity" title="Was sich zuletzt bewegt hat" action={<button onClick={() => go('activity')}>Verlauf</button>}><Timeline items={importantActivities(project.activities).slice(0, 5)} /></DashboardCard>,
   }
 
   return <div className="page"><PageHeader eyebrow="PROJEKTZENTRALE" title="Übersicht" description="Dein persönlicher Blick auf die Gründung von WeKiB e.V." /><div className="dashboard-layout">{layout.filter((id) => !hidden.includes(id)).map((id) => modules[id]).filter(Boolean)}</div></div>
@@ -705,7 +773,7 @@ function Decisions({ project, user, mutate }) {
   return <div className="page"><PageHeader eyebrow="NACHVOLLZIEHBAR ENTSCHEIDEN" title="Entscheidungsregister" description="Was wurde wann und warum beschlossen? Eine klare Spur durch die Gründungsphase." action={canManage ? <button className="primary-btn" onClick={() => setShowNew(!showNew)}><Plus size={16} /> Entscheidung</button> : null} />{showNew && <form className="card form-grid" onSubmit={add}><label>Titel<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label><label>Entscheidung<textarea value={form.decision} onChange={(e) => setForm({ ...form, decision: e.target.value })} /></label><label>Datum<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label><button className="primary-btn">Dokumentieren</button></form>}<div className="decision-list">{project.decisions.length ? project.decisions.map((d) => <article className="card decision" key={d.id}><div className="decision-index"><Gavel size={18} /></div><div><span>{fmtDate(d.date)} · {d.author}</span><h3>{d.title}</h3><p>{d.decision}</p></div></article>) : <EmptyState text="Noch keine Entscheidung dokumentiert." />}</div></div>
 }
 
-function ActivityPage({ project }) { return <div className="page narrow"><PageHeader eyebrow="TRANSPARENZ" title="Aktivitätsverlauf" description="Wer hat wann etwas im gemeinsamen Projekt verändert?" /><section className="card"><Timeline items={project.activities} /></section></div> }
+function ActivityPage({ project }) { const items = importantActivities(project.activities); return <div className="page narrow"><PageHeader eyebrow="TRANSPARENZ" title="Wichtige Änderungen" description="Nur relevante Projektänderungen – keine Autosaves, Klicks oder wiederholten CMS-Zwischenstände." /><section className="card"><Timeline items={items} /></section></div> }
 function Timeline({ items }) { return <div className="timeline">{items.length ? items.map((item) => <div key={item.id}><i /><div><strong>{item.text}</strong><span>{item.actor ? `${item.actor} · ` : ''}{fmtDateTime(item.createdAt)}</span></div></div>) : <EmptyState compact text="Noch keine Aktivität." />}</div> }
 
 function Studio({ project, mutate }) {
@@ -725,9 +793,9 @@ function Onboarding({ project, user, mutate, kind }) {
     ['Dokumente gemeinsam entwickeln', 'Jede gespeicherte Fassung erhält eine Version mit deinem Namen.'],
     ['Dein Profil', 'Halte nur Angaben fest, die für die gemeinsame Gründung relevant sind.'],
   ] : [
-    ['Willkommen bei WeKiB', 'Du wurdest für die Mitarbeit an der Gründung eingeladen.'],
-    ['Dein Arbeitsbereich', 'Du siehst gemeinsame Informationen und kannst eigene Dokumente verwalten.'],
-    ['Gemeinsam transparent', 'Kommentare, Umfragen und Termine halten alle auf demselben Stand.'],
+    ['Willkommen bei WeKiB', 'Dein Konto öffnet den erweiterten registrierten Bereich.'],
+    ['Mein WeKiB', 'Hier liest du aktuelle Informationen und kannst an freigegebenen Mitglieder-Umfragen teilnehmen.'],
+    ['Weitere Bereiche', 'Gründung, Vorstand, CMS oder Administration werden nur nach ausdrücklicher Freigabe sichtbar.'],
   ]
   const [step, setStep] = useState(0)
   const done = () => mutate((p) => { p.onboarding[user.email] = { done: true, completedAt: nowIso(), kind } }, 'Einführung abgeschlossen')

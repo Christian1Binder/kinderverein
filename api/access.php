@@ -66,12 +66,11 @@ function sanitize_profiles_for_user(array $profiles, array $user): array {
 }
 
 function filter_scope_items(array $items, bool $allowFoundation, bool $allowBoard): array {
-    if (!$allowFoundation && !$allowBoard) return [];
     return array_values(array_filter($items, static function ($item) use ($allowFoundation, $allowBoard): bool {
         if (!is_array($item)) return false;
         $scope = (string)($item['scope'] ?? 'foundation');
-        if ($scope === 'board') return $allowBoard;
         if ($scope === 'public' || $scope === 'member') return true;
+        if ($scope === 'board') return $allowBoard;
         return $allowFoundation;
     }));
 }
@@ -99,7 +98,7 @@ function filter_project_state_for_user(array $state, array $user): array {
         $state['files'] = [];
         $state['events'] = [];
         $state['decisions'] = [];
-        $state['polls'] = [];
+        $state['polls'] = filter_scope_items(is_array($state['polls'] ?? null) ? $state['polls'] : [], false, false);
         $state['activities'] = [];
         $state['messages'] = [];
         $state['phases'] = [];
@@ -137,6 +136,43 @@ function merge_scoped_section(array $current, array $incoming, bool $allowBoard)
     return array_merge($allowed, $protected);
 }
 
+function merge_member_poll_votes(array $currentPolls, array $incomingPolls, array $user): array {
+    $email = strtolower((string)($user['email'] ?? ''));
+    if ($email === '') return $currentPolls;
+    $incomingById = [];
+    foreach ($incomingPolls as $poll) if (is_array($poll) && isset($poll['id'])) $incomingById[(string)$poll['id']] = $poll;
+
+    foreach ($currentPolls as &$poll) {
+        if (!is_array($poll) || (string)($poll['scope'] ?? 'foundation') !== 'member' || (string)($poll['status'] ?? 'open') !== 'open') continue;
+        $incomingPoll = $incomingById[(string)($poll['id'] ?? '')] ?? null;
+        if (!is_array($incomingPoll)) continue;
+        $selectedId = null;
+        foreach (($incomingPoll['options'] ?? []) as $option) {
+            if (!is_array($option)) continue;
+            $votes = is_array($option['votes'] ?? null) ? $option['votes'] : [];
+            foreach ($votes as $voteEmail) {
+                if (strtolower((string)$voteEmail) === $email) { $selectedId = (string)($option['id'] ?? ''); break 2; }
+            }
+        }
+        foreach ($poll['options'] as &$option) {
+            if (!is_array($option)) continue;
+            $votes = is_array($option['votes'] ?? null) ? $option['votes'] : [];
+            $votes = array_values(array_filter($votes, static fn($voteEmail): bool => strtolower((string)$voteEmail) !== $email));
+            if ($selectedId !== null && (string)($option['id'] ?? '') === $selectedId) $votes[] = $email;
+            $option['votes'] = array_values(array_unique($votes));
+        }
+        unset($option);
+    }
+    unset($poll);
+    return $currentPolls;
+}
+
+function merge_member_polls_for_cms(array $currentPolls, array $incomingPolls): array {
+    $protected = array_values(array_filter($currentPolls, static fn($poll): bool => !is_array($poll) || (string)($poll['scope'] ?? 'foundation') !== 'member'));
+    $member = array_values(array_filter($incomingPolls, static fn($poll): bool => is_array($poll) && (string)($poll['scope'] ?? 'foundation') === 'member'));
+    return array_merge($member, $protected);
+}
+
 function merge_project_state_for_user(array $current, array $incoming, array $user): array {
     $access = portal_access_for_state($current, $user);
     if ($access['admin']) return $incoming;
@@ -151,6 +187,8 @@ function merge_project_state_for_user(array $current, array $incoming, array $us
         if (!isset($current['onboarding']) || !is_array($current['onboarding'])) $current['onboarding'] = [];
         $current['onboarding'][$email] = $incoming['onboarding'][$email];
     }
+
+    $current['polls'] = merge_member_poll_votes(is_array($current['polls'] ?? null) ? $current['polls'] : [], is_array($incoming['polls'] ?? null) ? $incoming['polls'] : [], $user);
 
     if ($access['foundation'] || $access['board']) {
         $permissions = portal_permissions_for_state($current, $user);
@@ -180,8 +218,9 @@ function merge_project_state_for_user(array $current, array $incoming, array $us
     $permissions = portal_permissions_for_state($current, $user);
     if ($access['board'] && !empty($permissions['finance_manage']) && isset($incoming['finance']) && is_array($incoming['finance'])) $current['finance'] = $incoming['finance'];
 
-    if ($access['cms'] && isset($incoming['settings']) && is_array($incoming['settings'])) {
-        $current['settings'] = $incoming['settings'];
+    if ($access['cms']) {
+        if (isset($incoming['settings']) && is_array($incoming['settings'])) $current['settings'] = $incoming['settings'];
+        if (isset($incoming['polls']) && is_array($incoming['polls'])) $current['polls'] = merge_member_polls_for_cms(is_array($current['polls'] ?? null) ? $current['polls'] : [], $incoming['polls']);
     }
     return $current;
 }

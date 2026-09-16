@@ -216,7 +216,7 @@ export default function AdminBackend({ project, user, mutate, setToast, initialT
       </section>
     </>}
 
-    {tab === 'cms' && canCms && <><PortalCms project={project} mutate={mutate} setToast={setToast} /><div style={{height:24}}/><CmsPanel project={project} mutate={mutate} /></>}
+    {tab === 'cms' && canCms && <><PortalCms project={project} user={user} mutate={mutate} setToast={setToast} /><div style={{height:24}}/><CmsPanel project={project} mutate={mutate} /></>}
   </div>
 }
 

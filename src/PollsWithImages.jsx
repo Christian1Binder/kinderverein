@@ -23,7 +23,7 @@ function optionImageSrc(option) {
   return ''
 }
 
-export default function PollsWithImages({ project, user, mutate, setToast, canCreate = true }) {
+export default function PollsWithImages({ project, user, mutate, setToast, canCreate = true, scope = 'foundation', uploadScope = 'foundation', embedded = false, heading = 'Umfragen', intro = 'Text oder Bild: Varianten direkt miteinander vergleichen und transparent abstimmen.' }) {
   const [showNew, setShowNew] = useState(false)
   const [busy, setBusy] = useState(false)
   const [title, setTitle] = useState('')
@@ -89,7 +89,7 @@ export default function PollsWithImages({ project, user, mutate, setToast, canCr
         let imageMeta = {}
         if (option.file) {
           if (cloudEnabled) {
-            const meta = await uploadProjectFile(option.file)
+            const meta = await uploadProjectFile(option.file, uploadScope)
             imageMeta = { imageId: meta.id, imageName: meta.name, imageMime: meta.mime }
           } else {
             imageMeta = { imageDataUrl: await fileToDataUrl(option.file), imageName: option.file.name, imageMime: option.file.type }
@@ -104,7 +104,8 @@ export default function PollsWithImages({ project, user, mutate, setToast, canCr
         description: description.trim(),
         status: 'open',
         closes,
-        multiple,
+        multiple: scope === 'member' ? false : multiple,
+        scope,
         createdBy: user.email,
         createdByName: user.name || user.email,
         createdAt: new Date().toISOString(),
@@ -119,9 +120,11 @@ export default function PollsWithImages({ project, user, mutate, setToast, canCr
     }
   }
 
-  return <div className="page polls-v3">
+  const visiblePolls = project.polls.filter((poll) => (poll.scope || 'foundation') === scope)
+
+  return <div className={embedded ? 'polls-v3 polls-embedded' : 'page polls-v3'}>
     <div className="page-header">
-      <div><p className="eyebrow">GEMEINSAM ENTSCHEIDEN</p><h1>Umfragen</h1><p>Text oder Bild: Varianten direkt miteinander vergleichen und transparent abstimmen.</p></div>
+      <div><p className="eyebrow">GEMEINSAM ENTSCHEIDEN</p><h1>{heading}</h1><p>{intro}</p></div>
       {canCreate && <button className="primary-btn" onClick={() => setShowNew((value) => !value)}><Plus size={16} /> Umfrage</button>}
     </div>
 
@@ -131,7 +134,7 @@ export default function PollsWithImages({ project, user, mutate, setToast, canCr
         <label>Titel<input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="z. B. Welches Logo passt am besten zu WeKiB?" /></label>
         <label>Beschreibung · optional<textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Kurzer Kontext für die Abstimmung …" /></label>
         <label>Abstimmung bis · optional<input type="date" value={closes} onChange={(e) => setCloses(e.target.value)} /></label>
-        <label className="poll-switch"><span><strong>Mehrfachauswahl</strong><small>Mitglieder dürfen mehrere Varianten auswählen.</small></span><input type="checkbox" checked={multiple} onChange={(e) => setMultiple(e.target.checked)} /></label>
+        {scope !== 'member' && <label className="poll-switch"><span><strong>Mehrfachauswahl</strong><small>Mitglieder dürfen mehrere Varianten auswählen.</small></span><input type="checkbox" checked={multiple} onChange={(e) => setMultiple(e.target.checked)} /></label>}
       </div>
 
       <div className="poll-builder-options">
@@ -153,7 +156,7 @@ export default function PollsWithImages({ project, user, mutate, setToast, canCr
       <div className="poll-builder-actions"><button type="button" className="secondary-btn" onClick={reset}>Abbrechen</button><button className={`primary-btn ${busy ? 'disabled' : ''}`} disabled={busy}>{busy ? 'Bilder werden hochgeladen …' : 'Umfrage veröffentlichen'}</button></div>
     </form>}
 
-    <div className="poll-grid">{project.polls.length ? project.polls.map((poll) => <PollCard key={poll.id} poll={poll} user={user} mutate={mutate} />) : <div className="card poll-empty"><VoteEmpty /></div>}</div>
+    <div className="poll-grid">{visiblePolls.length ? visiblePolls.map((poll) => <PollCard key={poll.id} poll={poll} user={user} mutate={mutate} />) : <div className="card poll-empty"><VoteEmpty /></div>}</div>
   </div>
 }
 
@@ -179,7 +182,7 @@ function PollCard({ poll, user, mutate }) {
       target.options.forEach((option) => { option.votes = (option.votes || []).filter((email) => email !== user.email) })
       if (!alreadySelected) selected.votes.push(user.email)
     }
-  }, `Stimme bei „${poll.title}“ aktualisiert`)
+  })
 
   return <article className={`poll-card visual-poll ${hasImages ? 'has-images' : ''}`}>
     <div className="poll-head"><span className={`status-pill ${poll.status}`}>{poll.status === 'open' ? 'offen' : 'beendet'}</span>{poll.closes && <small><Clock3 size={12} /> bis {fmtDate(poll.closes)}</small>}</div>
