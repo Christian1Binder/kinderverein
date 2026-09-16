@@ -17,6 +17,25 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Prepare migration without workflow writes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.maintenance/cleanup-redesign.py')
+          s = p.read_text()
+          marker = "]:                                                                \n    unlink(path)\n\n# ---------------------------------------------------------------------------\n# Single Vite entry"
+          # Tolerant replacement: only the cleanup-list call is indented exactly four spaces.
+          s = s.replace("]:                                                                \n    unlink(path)\n", "]:                                                                \n    if not path.startswith('.github/workflows/'):\n        unlink(path)\n", 1)
+          if "    if not path.startswith('.github/workflows/'):" not in s:
+              s = s.replace("    unlink(path)\n\n# ---------------------------------------------------------------------------\n# Single Vite entry", "    if not path.startswith('.github/workflows/'):\n        unlink(path)\n\n# ---------------------------------------------------------------------------\n# Single Vite entry", 1)
+          start = s.find("for workflow in ['.github/workflows/build-strato.yml'")
+          end = s.find("\nwrite('README.md'", start)
+          if start != -1 and end != -1:
+              s = s[:start] + "# Workflow files are maintained separately through the GitHub connector.\n" + s[end:]
+          s = s.replace("unlink('.github/workflows/cleanup-redesign.yml')\n", "")
+          p.write_text(s)
+          PY
+
       - name: Apply cleanup and redesign
         run: python .maintenance/cleanup-redesign.py
 
