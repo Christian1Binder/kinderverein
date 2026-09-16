@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Copy, Eye, ImagePlus, Plus, Trash2 } from 'lucide-r
 import { PortalBlocks, DEFAULT_MEMBER_BLOCKS, DEFAULT_PUBLIC_BLOCKS } from './PortalBlocks.jsx'
 import { projectImageUrl, uploadProjectFile } from './lib/projectStore.js'
 import PollsWithImages from './PollsWithImages.jsx'
+import MemberPollAdmin from './MemberPollAdmin.jsx'
 
 const TYPES = [
   ['hero', 'Hero / Aufmacher'], ['text', 'Textbereich'], ['image', 'Bild + Text'], ['cards', 'Karten'],
@@ -28,6 +29,7 @@ function makeBlock(type, audience) {
 
 export default function PortalCms({ project, user, mutate, setToast }) {
   const [audience, setAudience] = useState('public')
+  const [memberSection, setMemberSection] = useState('content')
   const [preview, setPreview] = useState(false)
   const blocks = useMemo(() => audience === 'public'
     ? (project.settings?.publicBlocks?.length ? project.settings.publicBlocks : DEFAULT_PUBLIC_BLOCKS)
@@ -56,11 +58,13 @@ export default function PortalCms({ project, user, mutate, setToast }) {
       <button className={audience === 'member' ? 'active' : ''} onClick={() => setAudience('member')}>Registrierter Lesebereich</button>
       <button onClick={() => setPreview(!preview)}><Eye size={15} /> {preview ? 'Editor' : 'Vorschau'}</button>
     </div>
-    {preview ? <div className="cms-preview"><div className="cms-preview-head"><span>Vorschau</span><span>{audience === 'public' ? 'öffentlich' : 'nur angemeldete Nutzer'}</span></div><PortalBlocks blocks={blocks} mode={audience === 'public' ? 'public' : 'member'} /></div> : <div className="cms-builder">
+    {audience === 'member' && <div className="cms-member-tabs"><button className={memberSection === 'content' ? 'active' : ''} onClick={() => setMemberSection('content')}>Inhalte & Umfragen</button><button className={memberSection === 'analytics' ? 'active' : ''} onClick={() => { setMemberSection('analytics'); setPreview(false) }}>Umfragen & Auswertung</button></div>}
+    {(audience !== 'member' || memberSection === 'content') && (preview ? <div className="cms-preview"><div className="cms-preview-head"><span>Vorschau</span><span>{audience === 'public' ? 'öffentlich' : 'nur angemeldete Nutzer'}</span></div><PortalBlocks blocks={blocks} mode={audience === 'public' ? 'public' : 'member'} /></div> : <div className="cms-builder">
       <aside className="cms-palette card"><strong>Bausteine</strong><small>Baustein anklicken, um ihn unten anzufügen.</small>{TYPES.map(([type,label]) => <button key={type} onClick={() => add(type)}><Plus size={14} /> {label}</button>)}</aside>
       <section className="cms-canvas">{blocks.map((block,index) => <BlockEditor key={block.id} block={block} onChange={(patch) => update(block.id, patch)} onDelete={() => remove(block.id)} onDuplicate={() => duplicate(block)} onUp={() => move(index,-1)} onDown={() => move(index,1)} setToast={setToast} />)}</section>
-    </div>}
-    {audience === 'member' && !preview && user && <section className="cms-member-polls"><PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate scope="member" uploadScope="member-cms" embedded heading="Umfragen im Mitgliederbereich" intro="Erstelle Abstimmungen für registrierte Nutzer. Pro Konto ist bei diesen Umfragen genau eine Stimme möglich; Bilder je Antwortoption sind erlaubt." /></section>}
+    </div>)}
+    {audience === 'member' && memberSection === 'content' && !preview && user && <section className="cms-member-polls"><PollsWithImages project={project} user={user} mutate={mutate} setToast={setToast} canCreate scope="member" uploadScope="member-cms" embedded heading="Umfragen im Mitgliederbereich" intro="Erstelle Abstimmungen für registrierte Nutzer. Pro Konto ist bei diesen Umfragen genau eine Stimme möglich; Bilder je Antwortoption sind erlaubt." /></section>}
+    {audience === 'member' && memberSection === 'analytics' && user && <MemberPollAdmin project={project} mutate={mutate} setToast={setToast} />}
   </div>
 }
 

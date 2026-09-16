@@ -169,6 +169,8 @@ function PollCard({ poll, user, mutate }) {
   const total = options.reduce((n, option) => n + (option.votes?.length || 0), 0)
   const myVotes = options.filter((option) => option.votes?.includes(user.email)).map((option) => option.id)
   const hasImages = options.some((option) => option.imageId || option.imageDataUrl)
+  const resultsVisibility = poll.resultsVisibility || 'after-vote'
+  const canSeeResults = (poll.scope || 'foundation') !== 'member' || resultsVisibility === 'always' || (resultsVisibility === 'after-vote' && myVotes.length > 0) || (resultsVisibility === 'after-close' && poll.status !== 'open')
 
   const vote = (optionId) => mutate((p) => {
     const target = p.polls.find((item) => item.id === poll.id)
@@ -192,16 +194,16 @@ function PollCard({ poll, user, mutate }) {
     <div className={`poll-options ${hasImages ? 'poll-options--visual' : ''}`}>
       {options.map((option) => {
         const count = option.votes?.length || 0
-        const percent = total ? Math.round((count / total) * 100) : 0
+        const percent = canSeeResults && total ? Math.round((count / total) * 100) : 0
         const selected = myVotes.includes(option.id)
         const src = optionImageSrc(option)
         return <button key={option.id} disabled={poll.status !== 'open'} className={selected ? 'selected' : ''} onClick={() => vote(option.id)}>
           {src && <span className="poll-option-image"><img src={src} alt={option.label} loading="lazy" /></span>}
-          <span className="poll-option-body"><span className="poll-option-label">{selected && <span className="poll-check"><Check size={12} /></span>}<strong>{option.label}</strong></span><b>{percent}%</b></span>
+          <span className="poll-option-body"><span className="poll-option-label">{selected && <span className="poll-check"><Check size={12} /></span>}<strong>{option.label}</strong></span><b>{canSeeResults ? `${percent}%` : '—'}</b></span>
           <i className="poll-result-bar" style={{ width: `${percent}%` }} />
         </button>
       })}
     </div>
-    <div className="visual-poll-footer"><span><Users size={13} /> {total} {total === 1 ? 'Stimme' : 'Stimmen'}</span>{poll.createdByName && <span>von {poll.createdByName}</span>}</div>
+    <div className="visual-poll-footer"><span><Users size={13} /> {canSeeResults ? `${total} ${total === 1 ? 'Stimme' : 'Stimmen'}` : 'Ergebnis noch verborgen'}</span>{poll.createdByName && <span>von {poll.createdByName}</span>}</div>
   </article>
 }

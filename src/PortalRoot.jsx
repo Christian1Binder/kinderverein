@@ -102,6 +102,7 @@ function PublicPortal({ onAuthenticated }) {
     try {
       const session = await signInWithEmail(login.email, login.password)
       setAuthUrl('')
+      setAuthUrl('')
       onAuthenticated(session)
     } catch (error) {
       setMessage(error.message)

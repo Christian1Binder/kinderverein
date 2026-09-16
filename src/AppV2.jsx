@@ -29,6 +29,15 @@ import Link from '@tiptap/extension-link'
 
 
 
+
+
+
+
+
+
+
+
+
 import * as mammoth from 'mammoth'
 import {
   Activity, ArrowDown, ArrowUp, Bell, Bold, CalendarDays, Check, CheckSquare2,
@@ -47,7 +56,7 @@ import PollsWithImages from './PollsWithImages.jsx'
 import AdminBackend from './AdminBackend.jsx'
 import Treasurer from './Treasurer.jsx'
 import FileExplorer from './FileExplorer.jsx'
-import { PortalBlocks, DEFAULT_MEMBER_BLOCKS } from './PortalBlocks.jsx'
+import { PortalBlocks, DEFAULT_MEMBER_BLOCKS, DEFAULT_PUBLIC_BLOCKS } from './PortalBlocks.jsx'
 
 const FOUNDATION_NAV = [
   ['tasks', 'Aufgaben', CheckSquare2],
@@ -87,6 +96,17 @@ const fmtDate = (value) => value ? new Intl.DateTimeFormat('de-DE', { day: '2-di
 const fmtDateTime = (value) => value ? new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—'
 
 const PORTAL_PAGES = new Set(['dashboard','tasks','documents','files','polls','calendar','members','decisions','activity','board','treasury','studio','admin','profile'])
+function portalViewFromUrl() {
+  const value = new URL(window.location.href).searchParams.get('view') || 'own'
+  return ['own','visitor','registered','founder','board'].includes(value) ? value : 'own'
+}
+function writePortalView(view) {
+  const url = new URL(window.location.href)
+  if (!view || view === 'own') url.searchParams.delete('view')
+  else url.searchParams.set('view', view)
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+}
+
 function portalPageFromUrl() {
   const value = new URL(window.location.href).searchParams.get('portal') || 'dashboard'
   return PORTAL_PAGES.has(value) ? value : 'dashboard'
@@ -187,6 +207,7 @@ function AppV2() {
   const [session, setSession] = useState(null)
   const [ready, setReady] = useState(false)
   const [page, setPage] = useState(() => portalPageFromUrl())
+  const [viewMode, setViewMode] = useState(() => portalViewFromUrl())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('wekib-theme') || 'light')
   const [search, setSearch] = useState('')
@@ -204,7 +225,7 @@ function AppV2() {
   }, [theme])
 
   useEffect(() => {
-    const onPopState = () => setPage(portalPageFromUrl())
+    const onPopState = () => { setPage(portalPageFromUrl()); setViewMode(portalViewFromUrl()) }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
@@ -330,6 +351,8 @@ function AppV2() {
   const canBoard = isAdmin || hasPermission(project, user, 'access_board')
   const canCms = isAdmin || hasPermission(project, user, 'cms_manage')
   const canFinance = isAdmin || (canBoard && hasPermission(project, user, 'finance_manage'))
+  const canPreview = isAdmin || kind === 'founder'
+  const previewMode = canPreview ? viewMode : 'own'
 
   const searchResults = canFoundation || canBoard ? buildSearchResults(project, search) : []
 
@@ -376,6 +399,7 @@ function AppV2() {
             {search && <SearchPalette results={searchResults} onSelect={(result) => { go(result.page); if (result.docId) sessionStorage.setItem('wekib-open-doc', result.docId); if (result.fileId) sessionStorage.setItem('wekib-open-file', result.fileId) }} />}
           </div>
           <div className="top-actions">
+            {canPreview && <label className="view-as-control"><span>Ansicht als</span><select value={previewMode} onChange={(e) => { setViewMode(e.target.value); writePortalView(e.target.value) }}><option value="own">Eigene Ansicht</option><option value="visitor">Besucher</option><option value="registered">Registrierter Nutzer</option><option value="founder">Gründungsmitglied</option><option value="board">Vorstand</option></select></label>}
             <div className="env-badge">LAB</div>
             <button className="icon-btn" title="Darstellung wechseln" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-btn"><Bell size={18} /></button>
@@ -383,6 +407,7 @@ function AppV2() {
         </header>
 
         <div className="content-frame">
+          {previewMode !== 'own' ? <PortalRolePreview mode={previewMode} project={project} user={user} /> : <>
           {page === 'dashboard' && (canFoundation ? <Dashboard project={project} user={user} mutate={mutate} go={go} /> : <MemberDashboard project={project} user={user} profile={profile} mutate={mutate} setToast={setToast} canBoard={canBoard} canCms={canCms} />)}
           {canFoundation && page === 'tasks' && <Tasks project={project} user={user} mutate={mutate} />}
           {canFoundation && page === 'documents' && <Documents project={project} user={user} mutate={mutate} setToast={setToast} />}
@@ -397,13 +422,32 @@ function AppV2() {
           {canCms && page === 'studio' && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} initialTab="cms" />}
           {isAdmin && page === 'admin' && <AdminBackend project={project} user={user} mutate={mutate} setToast={setToast} initialTab="users" />}
           {page === 'profile' && <Profile project={project} user={user} mutate={mutate} />}
+          </>}
         </div>
       </main>
 
-      {!onboardingDone && <Onboarding project={project} user={user} mutate={mutate} kind={kind} />}
+      {previewMode === 'own' && !onboardingDone && <Onboarding project={project} user={user} mutate={mutate} kind={kind} />}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )
+}
+
+function PortalRolePreview({ mode, project, user }) {
+  const noop = () => {}
+  const fakeRegistered = { ...user, email: 'preview-registriert@wekib.invalid', name: 'Testnutzer', role: 'member' }
+  const fakeFounder = { ...user, email: 'preview-gruendung@wekib.invalid', name: 'Gründungsmitglied', role: 'member' }
+  const nav = mode === 'visitor' ? ['Startseite','Über uns','Angebote','Kontakt','Anmelden']
+    : mode === 'registered' ? ['Mein WeKiB','Profil']
+    : mode === 'founder' ? ['Mein WeKiB','Aufgaben','Dokumente','Dateien','Umfragen','Termine','Mitglieder','Entscheidungen','Aktivität','Profil']
+    : ['Mein WeKiB','Vorstandsbereich','Schatzmeister*','Profil']
+  return <div className="portal-role-preview">
+    <div className="preview-banner"><Eye size={16}/><div><strong>Vorschau: {mode === 'visitor' ? 'Besucher' : mode === 'registered' ? 'Registrierter Nutzer' : mode === 'founder' ? 'Gründungsmitglied' : 'Vorstand'}</strong><span>Nur Vorschau – Änderungen und Abstimmungen sind in dieser simulierten Ansicht deaktiviert.</span></div></div>
+    <div className="preview-nav">{nav.map((label) => <span key={label}>{label}</span>)}</div>
+    {mode === 'visitor' && <div className="preview-public"><PortalBlocks blocks={project.settings?.publicBlocks?.length ? project.settings.publicBlocks : DEFAULT_PUBLIC_BLOCKS} mode="public" /></div>}
+    {mode === 'registered' && <MemberDashboard project={project} user={fakeRegistered} profile={{ displayName: 'Testnutzer', kind: 'member' }} mutate={noop} setToast={noop} canBoard={false} canCms={false} />}
+    {mode === 'founder' && <Dashboard project={project} user={fakeFounder} mutate={noop} go={noop} />}
+    {mode === 'board' && <BoardArea canFinance={true} go={noop} />}
+  </div>
 }
 
 function MemberDashboard({ project, user, profile, mutate, setToast, canBoard, canCms }) {
